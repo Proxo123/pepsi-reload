@@ -75,6 +75,7 @@ function Menu.create(ctx)
 
 	combatSec:AddToggle({ Name = "No Spread", Flag = "NoSpread", Value = false })
 	combatSec:AddToggle({ Name = "No Recoil", Flag = "NoRecoil", Value = false })
+	combatSec:AddToggle({ Name = "Instant Reload", Flag = "InstantReload", Value = false })
 
 	espMain:AddToggle({
 		Name = "Enabled",

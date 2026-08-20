@@ -84,6 +84,7 @@ function Main.start(import)
 			or ctx.flags.flagOn("SilentAim")
 			or ctx.flags.flagOn("NoSpread")
 			or ctx.flags.flagOn("NoRecoil")
+			or ctx.flags.flagOn("InstantReload")
 	end
 
 	local function needsVisuals()
@@ -222,6 +223,7 @@ function Main.start(import)
 				end
 				ctx.combat.syncNoSpreadToggle()
 				ctx.combat.syncNoRecoilToggle()
+				ctx.combat.syncInstantReloadToggle()
 				ctx.combat.syncSilentAimToggle()
 				if not needsLogic() then
 					return

@@ -7,7 +7,22 @@ function Combat.create(ctx)
 	local state = ctx.state
 
 	local fireHooks = {}
+	local reloadHooks = {}
 	local spreadFnOriginals = {}
+
+	local function restoreReloadHooks()
+		local stored = getgenv()._PepsiReloadHooks
+		if not stored then
+			return
+		end
+		for _, data in stored do
+			if data.mod and data.original then
+				data.mod.Reload = data.original
+				data.mod._PepsiReloadWrapped = nil
+			end
+		end
+		getgenv()._PepsiReloadHooks = nil
+	end
 
 	local function restoreSpreadHooks()
 		local stored = getgenv()._PepsiSpreadOriginals
@@ -39,6 +54,71 @@ function Combat.create(ctx)
 
 	restoreSpreadHooks()
 	restoreFireHooks()
+	restoreReloadHooks()
+
+	local remoteHandler
+
+	local function getRemoteHandler()
+		if remoteHandler then
+			return remoteHandler
+		end
+		local ok, rh = pcall(function()
+			return require(RS.Modules.M3WS_FRAMEWORK.Services.RemoteHandler)
+		end)
+		if ok then
+			remoteHandler = rh
+		end
+		return remoteHandler
+	end
+
+	local function instantReloadGun(p8)
+		if not p8 or not p8.Equiped or p8.Reloading then
+			return false
+		end
+		local rh = getRemoteHandler()
+		local char = lp.Character
+		local stats = p8.Stats
+		local tool = p8.Tool
+		if not rh or not char or not stats or not tool then
+			return false
+		end
+		local ammo = tool:FindFirstChild("Ammo")
+		local ammoClips = char:FindFirstChild("AmmoClips")
+		if not ammo or not ammoClips then
+			return false
+		end
+		local clipVal = ammoClips:FindFirstChild(stats.AmmoTake)
+		if not clipVal then
+			return false
+		end
+
+		p8.Reloading = true
+		local af = gameApi.getAllFunctions()
+		if af and stats.ReloadSound and p8.Handle then
+			pcall(function()
+				af.PlaySound(stats.ReloadSound, p8.Handle)
+			end)
+		end
+
+		local ok, err = pcall(function()
+			local taken = rh.InvokeServer("GetClip", stats.AmmoTake)
+			local newAmmo = math.min(stats.Ammo, ammo.Value + taken)
+			local clipLeft = taken - (newAmmo - ammo.Value)
+			ammo.Value = newAmmo
+			clipVal.Value = clipLeft
+			rh.FireServer("Server_Gun", "ChangeAmmo", {
+				Ammo = ammo.Value,
+				[stats.AmmoTake] = clipVal.Value,
+			}, tool)
+		end)
+
+		p8.Reloading = false
+		if not ok then
+			warn("[Pepsi Reload] Instant reload failed:", err)
+			return false
+		end
+		return true
+	end
 
 	local function getPredictedPos(part)
 		return part.Position
@@ -166,6 +246,58 @@ function Combat.create(ctx)
 		end
 		table.clear(fireHooks)
 		getgenv()._PepsiFireHooks = nil
+	end
+
+	local function unhookGunReloads()
+		for _, data in reloadHooks do
+			if data.mod and data.original then
+				data.mod.Reload = data.original
+				data.mod._PepsiReloadWrapped = nil
+			end
+		end
+		table.clear(reloadHooks)
+		getgenv()._PepsiReloadHooks = nil
+	end
+
+	local function hookGunReloadsOnce()
+		if getgenv()._PepsiReloadHooks then
+			return
+		end
+		local stored = {}
+		local gf = RS.Modules.M3WS_FRAMEWORK.Services.GunService.GunFunctions
+		for _, child in gf:GetChildren() do
+			if child:IsA("ModuleScript") and not reloadHooks[child] then
+				local ok, mod = pcall(require, child)
+				if ok and type(mod) == "table" and type(mod.Reload) == "function" and not mod._PepsiReloadWrapped then
+					local original = mod.Reload
+					mod._PepsiReloadWrapped = true
+					mod.Reload = function(p8, ...)
+						if state.instantReloadActive then
+							if instantReloadGun(p8) then
+								return false
+							end
+							local stats = p8 and p8.Stats
+							if stats and stats.ReloadTime then
+								local saved = stats.ReloadTime
+								stats.ReloadTime = 0
+								local callOk, result = pcall(original, p8, ...)
+								stats.ReloadTime = saved
+								if not callOk then
+									error(result)
+								end
+								return result
+							end
+						end
+						return original(p8, ...)
+					end
+					reloadHooks[child] = { mod = mod, original = original }
+					table.insert(stored, reloadHooks[child])
+				end
+			end
+		end
+		if #stored > 0 then
+			getgenv()._PepsiReloadHooks = stored
+		end
 	end
 
 	local function refreshDirectionSpreadHook()
@@ -320,6 +452,35 @@ function Combat.create(ctx)
 		end
 	end
 
+	local function enableInstantReload()
+		if state.instantReloadActive then
+			return
+		end
+		state.instantReloadActive = true
+		hookGunReloadsOnce()
+	end
+
+	local function disableInstantReload()
+		if not state.instantReloadActive then
+			return
+		end
+		state.instantReloadActive = false
+		unhookGunReloads()
+	end
+
+	local function syncInstantReloadToggle()
+		local want = ctx.flags.flagOn("InstantReload")
+		if want == state.instantReloadFlagState then
+			return
+		end
+		state.instantReloadFlagState = want
+		if want then
+			enableInstantReload()
+		else
+			disableInstantReload()
+		end
+	end
+
 	local function enableNoRecoil()
 		if state.noRecoilActive then
 			return
@@ -360,9 +521,11 @@ function Combat.create(ctx)
 	local function disableAll()
 		disableNoSpread()
 		disableNoRecoil()
+		disableInstantReload()
 		disableSilentAim()
 		unhookGiveRandomSpread()
 		unhookGunFires()
+		unhookGunReloads()
 		if state.rayNamecallRestore and hookmetamethod then
 			pcall(function()
 				hookmetamethod(game, "__namecall", state.rayNamecallRestore)
@@ -372,6 +535,7 @@ function Combat.create(ctx)
 		restoreSpreadHooks()
 		state.noSpreadFlagState = false
 		state.noRecoilFlagState = false
+		state.instantReloadFlagState = false
 		state.silentAimFlagState = false
 	end
 
@@ -380,6 +544,7 @@ function Combat.create(ctx)
 		syncNoSpreadToggle = syncNoSpreadToggle,
 		syncSilentAimToggle = syncSilentAimToggle,
 		syncNoRecoilToggle = syncNoRecoilToggle,
+		syncInstantReloadToggle = syncInstantReloadToggle,
 		disableAll = disableAll,
 	}
 end
