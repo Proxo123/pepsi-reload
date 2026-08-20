@@ -1,7 +1,7 @@
 --[[
   Pepsi Reload — paste into your executor:
 
-  loadstring(game:HttpGet("https://raw.githubusercontent.com/Proxo123/pepsi-reload/aa83ed6/loader.lua"))()
+  loadstring(game:HttpGet("https://raw.githubusercontent.com/Proxo123/pepsi-reload/7bbde1f/loader.lua"))()
 
   Pin changes each release so Roblox HttpGet does not serve a stale loader cache.
 ]]
@@ -11,7 +11,7 @@ if getgenv()._PepsiReloadUnload then
 end
 
 -- Pinned commit so Roblox HttpGet does not serve stale branch cache
-local COMMIT = "aa83ed6"
+local COMMIT = "7bbde1f"
 local REPO = "https://raw.githubusercontent.com/Proxo123/pepsi-reload/" .. COMMIT .. "/"
 
 getgenv().PEPSI_REPO = REPO
