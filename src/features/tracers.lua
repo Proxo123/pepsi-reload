@@ -12,6 +12,10 @@ function Tracers.create(ctx)
 			ctx.draw.setVisible(silentLine, false)
 			return
 		end
+		if not center then
+			ctx.draw.setVisible(silentLine, false)
+			return
+		end
 		local targetPart = ctx.state.silentTargetPart
 		if not targetPart or not targetPart.Parent then
 			ctx.draw.setVisible(silentLine, false)

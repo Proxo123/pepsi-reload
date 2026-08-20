@@ -20,8 +20,7 @@ function Aim.create(ctx)
 		return UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
 	end
 
-	local function targetScore(t, origin, center, fov, range)
-		local part = t.aimPart
+	local function screenScore(part, origin, center, fov, range)
 		if not part or not part.Parent then
 			return
 		end
@@ -34,10 +33,18 @@ function Aim.create(ctx)
 		if screenDist > fov or worldDist > range then
 			return
 		end
-		if ctx.flags.flagOn("AimWallCheck") and not targetsApi.visible(origin, part.Position, t.character) then
+		return screenDist
+	end
+
+	local function targetScore(t, origin, center, fov, range)
+		local score = screenScore(t.aimPart, origin, center, fov, range)
+		if not score then
 			return
 		end
-		return screenDist
+		if ctx.flags.flagOn("AimWallCheck") and not targetsApi.visible(origin, t.aimPart.Position, t.character, t.key) then
+			return
+		end
+		return score
 	end
 
 	local function getAimTarget(targetList)
@@ -64,35 +71,33 @@ function Aim.create(ctx)
 		local fov = tonumber(ctx.flags.flagVal("AimFOV", ctx.config.DEFAULTS.AimFOV)) or ctx.config.DEFAULTS.AimFOV
 		local center = ctx.camera.ViewportSize * 0.5
 		local stickyFov = fov * 1.35
+		local wallCheck = ctx.flags.flagOn("AimWallCheck")
+
 		if state.lockedTargetKey then
 			for _, t in ipairs(targetList) do
 				if t.key == state.lockedTargetKey and targetsApi.isValidAimTarget(t) then
 					local part = t.aimPart
-					if part and part.Parent then
-						local pos, onScreen = ctx.camera:WorldToViewportPoint(part.Position)
-						if onScreen and pos.Z > 0 then
-							local screenDist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-							local worldDist = (part.Position - origin).Magnitude
-							if screenDist <= stickyFov and worldDist <= range then
-								if not ctx.flags.flagOn("AimWallCheck") or targetsApi.visible(origin, part.Position, t.character) then
-									return t
-								end
-							end
-						end
+					local score = screenScore(part, origin, center, stickyFov, range)
+					if score and (not wallCheck or targetsApi.visible(origin, part.Position, t.character, t.key)) then
+						return t
 					end
 				end
 			end
 			state.lockedTargetKey = nil
 		end
+
 		local best, bestDist
 		for _, t in ipairs(targetList) do
 			if targetsApi.isValidAimTarget(t) then
-				local score = targetScore(t, origin, center, fov, range)
+				local score = screenScore(t.aimPart, origin, center, fov, range)
 				if score and (not bestDist or score < bestDist) then
 					best = t
 					bestDist = score
 				end
 			end
+		end
+		if best and wallCheck and not targetsApi.visible(origin, best.aimPart.Position, best.character, best.key) then
+			best = nil
 		end
 		if best then
 			state.lockedTargetKey = best.key
@@ -108,9 +113,6 @@ function Aim.create(ctx)
 		local targetPos = combat.getPredictedPos(part)
 		local worldDist = (targetPos - origin).Magnitude
 		if worldDist > range then
-			return
-		end
-		if ctx.flags.flagOn("AimWallCheck") and not targetsApi.visible(origin, targetPos, t.character) then
 			return
 		end
 		local pos, onScreen = ctx.camera:WorldToViewportPoint(targetPos)
@@ -147,6 +149,7 @@ function Aim.create(ctx)
 		local angleFov = tonumber(ctx.flags.flagVal("SilentAngleFOV", ctx.config.DEFAULTS.SilentAngleFOV))
 			or ctx.config.DEFAULTS.SilentAngleFOV
 		local center = ctx.camera.ViewportSize * 0.5
+		local wallCheck = ctx.flags.flagOn("AimWallCheck")
 		local best, bestDist
 		for _, t in ipairs(targetList) do
 			if targetsApi.isValidAimTarget(t) then
@@ -157,12 +160,17 @@ function Aim.create(ctx)
 				end
 			end
 		end
+		if best and wallCheck then
+			local targetPos = combat.getPredictedPos(best.aimPart)
+			if not targetsApi.visible(origin, targetPos, best.character, best.key) then
+				return
+			end
+		end
 		return best
 	end
 
 	local function applyAim()
 		if not ctx.flags.flagOn("AimEnabled") or not holdRequired() then
-			state.aimTargetPart = nil
 			return
 		end
 		if not state.aimTargetPart or not state.aimTargetPart.Parent then

@@ -7,13 +7,16 @@ function Targets.create(ctx)
 
 	local cachedTargets = {}
 	local cacheTime = 0
-	local TARGET_CACHE_TTL = 0.05
+	local TARGET_CACHE_TTL = 0.15
 
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude
 	rayParams.IgnoreWater = true
 	local rayIgnoreList = {}
 	local rayIgnoreTime = 0
+	local visCache = {}
+	local visCacheTime = {}
+	local VIS_CACHE_TTL = 0.35
 
 	local function getAimPart(char, root, head, isBot, wsKnown)
 		if ctx.flags.flagVal("AimPart", "Head") == "Torso" then
@@ -107,17 +110,26 @@ function Targets.create(ctx)
 		return rayIgnoreList
 	end
 
-	local function visible(origin, worldPos, char)
+	local function visible(origin, worldPos, char, cacheKey)
+		if cacheKey and visCache[cacheKey] ~= nil and tick() - (visCacheTime[cacheKey] or 0) < VIS_CACHE_TTL then
+			return visCache[cacheKey]
+		end
 		rayParams.FilterDescendantsInstances = getRayIgnore()
 		local result = workspace:Raycast(origin, worldPos - origin, rayParams)
+		local ok
 		if not result then
-			return true
+			ok = true
+		elseif not char then
+			ok = false
+		else
+			local adornee = char.Parent == workspace and char or gameApi.getHighlightAdornee(char)
+			ok = result.Instance and adornee and result.Instance:IsDescendantOf(adornee)
 		end
-		if not char then
-			return false
+		if cacheKey then
+			visCache[cacheKey] = ok
+			visCacheTime[cacheKey] = tick()
 		end
-		local adornee = char.Parent == workspace and char or gameApi.getHighlightAdornee(char)
-		return result.Instance and adornee and result.Instance:IsDescendantOf(adornee)
+		return ok
 	end
 
 	local function getColor(target)

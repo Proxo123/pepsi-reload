@@ -19,7 +19,7 @@ function Main.start(import)
 	local CoreGui = game:GetService("CoreGui")
 	local lp = Players.LocalPlayer
 
-	for _, step in { "PepsiReloadAim", "PepsiReloadAim_v12", "PepsiReloadAim_v13", "PepsiReloadAim_v14", "PepsiReloadAim_v15", Config.AIM_STEP } do
+	for _, step in { "PepsiReloadAim", "PepsiReloadAim_v12", "PepsiReloadAim_v13", "PepsiReloadAim_v14", "PepsiReloadAim_v15", "PepsiReloadAim_v16", Config.AIM_STEP } do
 		pcall(function()
 			RunService:UnbindFromRenderStep(step)
 		end)
@@ -49,8 +49,6 @@ function Main.start(import)
 			aimTargetPart = nil,
 			silentTargetPart = nil,
 			lockedTargetKey = nil,
-			silentRayState = nil,
-			rayNamecallRestore = nil,
 			directionSpreadRestore = nil,
 			fireRecoilRestore = nil,
 			noSpreadActive = false,
@@ -59,6 +57,8 @@ function Main.start(import)
 			noRecoilFlagState = false,
 			silentAimActive = false,
 			silentAimFlagState = false,
+			cachedTargetList = {},
+			lastSeenEsp = {},
 		},
 	}
 
@@ -73,8 +73,74 @@ function Main.start(import)
 	MenuMod.create(ctx)
 
 	local fovCircle = ctx.draw.drawing("Circle", { Filled = false, Thickness = 1, NumSides = 48, ZIndex = 4 })
-	local visAccum = 0
-	local VIS_INTERVAL = 1 / 30
+	local logicAccum = 0
+	local espAccum = 0
+	local LOGIC_HZ = 15
+	local ESP_HZ = 15
+
+	local function needsTargeting()
+		return ctx.flags.flagOn("ESPEnabled")
+			or ctx.flags.flagOn("AimEnabled")
+			or ctx.flags.flagOn("SilentAim")
+			or (ctx.flags.flagOn("SilentHandTracer") and ctx.flags.flagOn("SilentAim"))
+	end
+
+	local function runLogic()
+		ctx.camera = workspace.CurrentCamera
+		if not ctx.camera then
+			return
+		end
+		local vp = ctx.camera.ViewportSize
+		local center = Vector2.new(vp.X * 0.5, vp.Y * 0.5)
+		local origin = ctx.camera.CFrame.Position
+		local targetList = ctx.targets.collectTargets()
+		ctx.state.cachedTargetList = targetList
+
+		if fovCircle then
+			local show = ctx.flags.flagOn("AimEnabled") and ctx.flags.flagOn("AimShowFOV") and ctx.aim.holdRequired()
+			ctx.draw.setVisible(fovCircle, show)
+			if show then
+				fovCircle.Position = center
+				fovCircle.Radius = tonumber(ctx.flags.flagVal("AimFOV", Config.DEFAULTS.AimFOV)) or Config.DEFAULTS.AimFOV
+				fovCircle.Color = ctx.flags.flagVal("AimFOVColor", Color3.new(1, 1, 1))
+			end
+		end
+
+		local aimTarget = ctx.aim.getAimTarget(targetList)
+		ctx.state.aimTargetPart = aimTarget and aimTarget.aimPart or nil
+		local silentTarget = ctx.aim.getSilentTarget(targetList)
+		ctx.state.silentTargetPart = silentTarget and silentTarget.aimPart or nil
+
+		if ctx.flags.flagOn("SilentAim") and ctx.flags.flagOn("SilentHandTracer") then
+			ctx.tracers.updateSilentTracer(center)
+		elseif ctx.tracers then
+			ctx.tracers.updateSilentTracer(nil)
+		end
+	end
+
+	local function runEsp()
+		if not ctx.flags.flagOn("ESPEnabled") then
+			return
+		end
+		ctx.camera = workspace.CurrentCamera
+		if not ctx.camera then
+			return
+		end
+		local vp = ctx.camera.ViewportSize
+		local center = Vector2.new(vp.X * 0.5, vp.Y * 0.5)
+		local origin = ctx.camera.CFrame.Position
+		local targetList = ctx.state.cachedTargetList
+		if #targetList == 0 then
+			targetList = ctx.targets.collectTargets()
+			ctx.state.cachedTargetList = targetList
+		end
+		ctx.state.lastSeenEsp = ctx.esp.update(targetList, origin, center, vp)
+		for key in pairs(ctx.drawings) do
+			if not ctx.state.lastSeenEsp[key] then
+				ctx.draw.clearKey(key)
+			end
+		end
+	end
 
 	local function unload()
 		ctx.state.aimTargetPart = nil
@@ -126,70 +192,35 @@ function Main.start(import)
 		ctx.aim.applyAim()
 	end)
 
-	local function update(dt)
-		if library.IsGuiValid and not library.IsGuiValid() then
-			unload()
-			return
-		end
-		ctx.combat.syncNoSpreadToggle()
-		ctx.combat.syncNoRecoilToggle()
-		ctx.combat.syncSilentAimToggle()
-		ctx.camera = workspace.CurrentCamera
-		if not ctx.camera then
-			return
-		end
-		local vp = ctx.camera.ViewportSize
-		local center = Vector2.new(vp.X * 0.5, vp.Y * 0.5)
-		local origin = ctx.camera.CFrame.Position
-		local targetList = ctx.targets.collectTargets()
-		if fovCircle then
-			local show = ctx.flags.flagOn("AimEnabled") and ctx.flags.flagOn("AimShowFOV") and ctx.aim.holdRequired()
-			ctx.draw.setVisible(fovCircle, show)
-			if show then
-				fovCircle.Position = center
-				fovCircle.Radius = tonumber(ctx.flags.flagVal("AimFOV", Config.DEFAULTS.AimFOV)) or Config.DEFAULTS.AimFOV
-				fovCircle.Color = ctx.flags.flagVal("AimFOVColor", Color3.new(1, 1, 1))
-			end
-		end
-		local aimTarget = ctx.aim.getAimTarget(targetList)
-		ctx.state.aimTargetPart = aimTarget and aimTarget.aimPart or nil
-		local silentTarget = ctx.aim.getSilentTarget(targetList)
-		ctx.state.silentTargetPart = silentTarget and silentTarget.aimPart or nil
-
-		if ctx.flags.flagOn("SilentAim") and ctx.flags.flagOn("SilentHandTracer") then
-			ctx.tracers.updateSilentTracer(center)
-		end
-
-		local seen = {}
-		local needVis = ctx.flags.flagOn("ESPEnabled")
-		if needVis then
-			visAccum += dt or (1 / 60)
-			if visAccum >= VIS_INTERVAL then
-				visAccum = 0
-				if ctx.flags.flagOn("ESPEnabled") then
-					seen = ctx.esp.update(targetList, origin, center, vp)
-				end
-			elseif ctx.flags.flagOn("ESPEnabled") then
-				for _, t in ipairs(targetList) do
-					seen[t.key] = true
-				end
-			end
-		end
-		for key in pairs(ctx.drawings) do
-			if not seen[key] then
-				ctx.draw.clearKey(key)
-			end
-		end
-	end
-
 	table.insert(ctx.connections, Players.PlayerRemoving:Connect(function(p)
 		ctx.draw.clearKey("p" .. p.UserId)
 	end))
 	table.insert(
 		ctx.connections,
-		RunService.RenderStepped:Connect(function(dt)
+		RunService.Heartbeat:Connect(function(dt)
 			local ok, err = pcall(function()
-				update(dt)
+				if library.IsGuiValid and not library.IsGuiValid() then
+					unload()
+					return
+				end
+				ctx.combat.syncNoSpreadToggle()
+				ctx.combat.syncNoRecoilToggle()
+				ctx.combat.syncSilentAimToggle()
+				if not needsTargeting() then
+					return
+				end
+				logicAccum += dt
+				if logicAccum >= (1 / LOGIC_HZ) then
+					logicAccum = 0
+					runLogic()
+				end
+				if ctx.flags.flagOn("ESPEnabled") then
+					espAccum += dt
+					if espAccum >= (1 / ESP_HZ) then
+						espAccum = 0
+						runEsp()
+					end
+				end
 			end)
 			if not ok and not ctx.state.renderWarned then
 				ctx.state.renderWarned = true

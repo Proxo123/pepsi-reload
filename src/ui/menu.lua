@@ -97,7 +97,7 @@ function Menu.create(ctx)
 	espMain:AddToggle({ Name = "Distance", Flag = "ESPDistance", Value = true })
 	espMain:AddToggle({ Name = "Health", Flag = "ESPHealth", Value = true })
 	espMain:AddToggle({ Name = "Tracers", Flag = "ESPTracers", Value = false })
-	espMain:AddToggle({ Name = "Chams", Flag = "ESPChams", Value = true })
+	espMain:AddToggle({ Name = "Chams", Flag = "ESPChams", Value = false })
 
 	espSet:AddSlider({
 		Name = "Max Distance",

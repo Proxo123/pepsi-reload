@@ -52,47 +52,6 @@ function Combat.create(ctx)
 		return part.Position + vel * lead
 	end
 
-	local function installSilentRayHook()
-		if state.rayNamecallRestore or not hookmetamethod then
-			return
-		end
-		local old
-		old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-			local method = getnamecallmethod()
-			if state.silentRayState and self == workspace and method == "FindPartOnRayWithIgnoreList" then
-				state.silentRayState.count = (state.silentRayState.count or 0) + 1
-				if state.silentRayState.count == 1 then
-					return state.silentRayState.part, state.silentRayState.pos, state.silentRayState.normal
-				end
-			end
-			return old(self, ...)
-		end))
-		state.rayNamecallRestore = old
-	end
-
-	local function fireWithSilentRay(original, u14, p15)
-		local targetPos = getPredictedPos(state.silentTargetPart)
-		local normal = Vector3.new(0, 1, 0)
-		if u14 and u14.Handle then
-			local muzzle = (u14.Handle.CFrame * CFrame.new(0, 0, 0.5)).Position
-			local diff = targetPos - muzzle
-			if diff.Magnitude > 0.01 then
-				normal = -diff.Unit
-			end
-		end
-		state.silentRayState = {
-			part = state.silentTargetPart,
-			pos = targetPos,
-			normal = normal,
-			count = 0,
-		}
-		local ok, err = pcall(original, u14, p15)
-		state.silentRayState = nil
-		if not ok then
-			error(err)
-		end
-	end
-
 	local function hookGunFiresOnce()
 		if getgenv()._PepsiFireHooks then
 			return
@@ -118,10 +77,6 @@ function Combat.create(ctx)
 									added.Value = 0
 								end
 							end
-						end
-						if state.silentAimActive and state.silentTargetPart and state.silentTargetPart.Parent then
-							fireWithSilentRay(original, u14, p15)
-							return
 						end
 						return original(u14, p15)
 					end
@@ -219,9 +174,7 @@ function Combat.create(ctx)
 			return
 		end
 		state.silentAimActive = true
-		installSilentRayHook()
 		refreshDirectionSpreadHook()
-		hookGunFiresOnce()
 	end
 
 	local function disableSilentAim()
@@ -292,12 +245,6 @@ function Combat.create(ctx)
 		disableSilentAim()
 		unhookGunFires()
 		restoreSpreadHooks()
-		if state.rayNamecallRestore and hookmetamethod then
-			pcall(function()
-				hookmetamethod(game, "__namecall", state.rayNamecallRestore)
-			end)
-			state.rayNamecallRestore = nil
-		end
 		state.noSpreadFlagState = false
 		state.noRecoilFlagState = false
 		state.silentAimFlagState = false

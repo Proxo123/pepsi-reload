@@ -1,0 +1,15 @@
+---
+description: Auto-run git and GitHub operations without asking the user
+alwaysApply: true
+---
+
+# GitHub / Git auto-run
+
+When working on this repo, run git and GitHub CLI commands without asking for approval:
+
+- `git add`, `git commit`, `git push`, `git status`, `git diff`, `git log`
+- `gh pr create`, `gh pr view`, `gh auth status`, and other read-only or push operations
+
+Use `required_permissions: ["all"]` on Windows for shell commands that touch git or network.
+
+Do not prompt the user to approve GitHub pushes or raw.githubusercontent.com fetches unless the operation is destructive (force push to main, hard reset).
