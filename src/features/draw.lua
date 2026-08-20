@@ -1,4 +1,4 @@
-local DrawLib = Drawing
+local DrawLib = Drawing or (getgenv and getgenv().Drawing)
 
 local DrawingModule = {}
 
@@ -13,6 +13,9 @@ function DrawingModule.create(ctx)
 	end
 
 	local function drawing(class, props)
+		if not DrawLib or not DrawLib.new then
+			return nil
+		end
 		local obj
 		local ok = pcall(function()
 			obj = DrawLib.new(class)

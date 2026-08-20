@@ -3,7 +3,7 @@ local Main = {}
 function Main.start(import)
 	local Config = import("src/core/config")
 	local FlagsMod = import("src/core/flags")
-	local DrawingMod = import("src/features/drawing")
+	local DrawingMod = import("src/features/draw")
 	local GameMod = import("src/game/reload")
 	local TargetsMod = import("src/features/targets")
 	local CombatMod = import("src/features/combat")
