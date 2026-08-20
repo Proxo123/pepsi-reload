@@ -1,11 +1,18 @@
 local Loot = {}
 
-local PICKUP_HZ = 6
-local PICKUP_COOLDOWN = 0.45
-local MAX_PICKUPS_PER_TICK = 2
+local PICKUP_HZ = 4
+local PICKUP_COOLDOWN = 0.6
+local MAX_PICKUPS_PER_TICK = 1
 local INSTANT_RANGE = 14
-local LOOT_TABLE_RETRY = 3
-local AMMO_INDEX_REFRESH = 4
+
+local FALLBACK_AMMO = {
+	["Light Ammo"] = true,
+	["Medium Ammo"] = true,
+	["Heavy Ammo"] = true,
+	["Shells"] = true,
+	["Rocket Ammo"] = true,
+	["Arrow"] = true,
+}
 
 function Loot.create(ctx)
 	local lp = ctx.lp
@@ -13,13 +20,11 @@ function Loot.create(ctx)
 
 	local remoteHandler
 	local ammoCaps
-	local lootTableCache
-	local lootLookupFailedAt = 0
-	local ammoIndex = {}
-	local ammoIndexTime = 0
+	local ammoNames = {}
 	local pickedCooldown = {}
 	local pickupAccum = 0
 	local active = false
+	local lootFolder
 
 	local function getRemoteHandler()
 		if remoteHandler then
@@ -45,81 +50,71 @@ function Loot.create(ctx)
 		return ammoCaps
 	end
 
-	local function readEntry(entry, key)
-		if type(entry) ~= "table" then
-			return
+	local function loadAmmoNames()
+		if next(ammoNames) then
+			return ammoNames
 		end
-		return rawget(entry, key)
+		for name in FALLBACK_AMMO do
+			ammoNames[name] = true
+		end
+		local caps = getAmmoCaps()
+		if caps then
+			for name in caps do
+				if type(name) == "string" then
+					ammoNames[name] = true
+				end
+			end
+		end
+		return ammoNames
 	end
 
-	local function isAmmoEntry(entry)
-		if type(entry) ~= "table" then
+	local function getLootFolder()
+		if lootFolder and lootFolder.Parent then
+			return lootFolder
+		end
+		lootFolder = workspace:FindFirstChild("Loot")
+		return lootFolder
+	end
+
+	local function getModelPosition(model)
+		local part = model.PrimaryPart
+			or model:FindFirstChild("Main")
+			or model:FindFirstChild("Bottm")
+			or model:FindFirstChildWhichIsA("BasePart")
+		if part then
+			return part.Position
+		end
+	end
+
+	local function getLootId(model)
+		local id = model:GetAttribute("ID")
+		if type(id) == "string" and #id > 8 then
+			return id
+		end
+		for _, child in model:GetChildren() do
+			if child:IsA("BasePart") then
+				id = child:GetAttribute("ID")
+				if type(id) == "string" and #id > 8 then
+					return id
+				end
+			elseif child:IsA("StringValue") and child.Name == "ID" then
+				return child.Value
+			end
+		end
+		if model.Name:match("^[%w%-]+$") and #model.Name > 20 then
+			return model.Name
+		end
+	end
+
+	local function isAmmoModel(model)
+		if not model:IsA("Model") then
 			return false
 		end
-		local id = rawget(entry, "ID")
-		local pos = rawget(entry, "Position")
-		local lootType = rawget(entry, "type")
-		return type(id) == "string"
-			and #id > 8
-			and typeof(pos) == "Vector3"
-			and lootType == "Ammo"
-	end
-
-	local function scanLootTableOnce()
-		local best
-		local bestAmmo = 0
-		for _, value in getgc(true) do
-			if type(value) == "table" then
-				local ammoCount = 0
-				for _, entry in value do
-					if isAmmoEntry(entry) then
-						ammoCount += 1
-					end
-				end
-				if ammoCount > bestAmmo then
-					best = value
-					bestAmmo = ammoCount
-				end
-			end
+		local names = loadAmmoNames()
+		if names[model.Name] then
+			return true
 		end
-		return bestAmmo > 0 and best or nil
-	end
-
-	local function getLootTable()
-		if lootTableCache then
-			return lootTableCache
-		end
-		local now = tick()
-		if now - lootLookupFailedAt < LOOT_TABLE_RETRY then
-			return
-		end
-		lootTableCache = scanLootTableOnce()
-		lootLookupFailedAt = now
-		ammoIndexTime = 0
-		return lootTableCache
-	end
-
-	local function refreshAmmoIndex(lootTable)
-		table.clear(ammoIndex)
-		for id, entry in lootTable do
-			if isAmmoEntry(entry) then
-				if not readEntry(entry, "Ignore") and not readEntry(entry, "OPEN") then
-					local ball = readEntry(entry, "Ball")
-					if not ball or ball.Parent then
-						ammoIndex[#ammoIndex + 1] = entry
-					end
-				end
-			end
-		end
-		ammoIndexTime = tick()
-	end
-
-	local function getAmmoIndex(lootTable)
-		local now = tick()
-		if #ammoIndex == 0 or now - ammoIndexTime >= AMMO_INDEX_REFRESH then
-			refreshAmmoIndex(lootTable)
-		end
-		return ammoIndex
+		return model.Name:find("Ammo", 1, true) ~= nil
 	end
 
 	local function getPlayerRoot()
@@ -138,41 +133,25 @@ function Loot.create(ctx)
 		return char:FindFirstChild("HumanoidRootPart")
 	end
 
-	local function getClipState()
+	local function isClipFull(ammoName)
 		local char = lp.Character
 		local clips = char and char:FindFirstChild("AmmoClips")
-		if not clips then
-			return
+		if not clips or not ammoName then
+			return true
+		end
+		local clip = clips:FindFirstChild(ammoName)
+		if not clip then
+			return true
 		end
 		local caps = getAmmoCaps()
-		local full = {}
-		for _, clip in clips:GetChildren() do
-			if clip:IsA("ValueBase") then
-				local cap = caps and caps[clip.Name]
-				if cap and clip.Value >= cap then
-					full[clip.Name] = true
-				end
-			end
+		local cap = caps and caps[ammoName]
+		if cap and clip.Value >= cap then
+			return true
 		end
-		return full
+		return false
 	end
 
-	local function canPickupAmmo(entry, fullClips)
-		if readEntry(entry, "Chest") or readEntry(entry, "AmmoBox") or readEntry(entry, "AirDrop") then
-			return false
-		end
-		local name = readEntry(entry, "Name")
-		if not name or fullClips[name] then
-			return false
-		end
-		return true
-	end
-
-	local function tryPickup(entry, lootTable)
-		local id = readEntry(entry, "ID")
-		if not id then
-			return false
-		end
+	local function tryPickup(id)
 		local now = tick()
 		if pickedCooldown[id] and now - pickedCooldown[id] < PICKUP_COOLDOWN then
 			return false
@@ -181,25 +160,11 @@ function Loot.create(ctx)
 		if not rh or type(rh.InvokeServer) ~= "function" then
 			return false
 		end
-
 		local ok = pcall(function()
-			if lootTable then
-				lootTable[id] = nil
-			end
-			local ball = readEntry(entry, "Ball")
-			if ball and ball.Parent then
-				ball:Destroy()
-			end
 			rh.InvokeServer("PickedUpLoot", id)
 		end)
-
 		if ok then
 			pickedCooldown[id] = now
-			for i = #ammoIndex, 1, -1 do
-				if readEntry(ammoIndex[i], "ID") == id then
-					table.remove(ammoIndex, i)
-				end
-			end
 			return true
 		end
 		return false
@@ -222,19 +187,16 @@ function Loot.create(ctx)
 
 	local function pruneCooldowns(now)
 		for id, time in pickedCooldown do
-			if now - time > 8 then
+			if now - time > 10 then
 				pickedCooldown[id] = nil
 			end
 		end
 	end
 
 	local function runPickup()
+		local folder = getLootFolder()
 		local root = getPlayerRoot()
-		if not root then
-			return
-		end
-		local lootTable = getLootTable()
-		if not lootTable then
+		if not folder or not root then
 			return
 		end
 		local maxRangeSq = getMaxRangeSq()
@@ -243,48 +205,27 @@ function Loot.create(ctx)
 		end
 
 		local origin = root.Position
-		local fullClips = getClipState()
-		if not fullClips then
-			return
-		end
+		local closestId
+		local closestDistSq = maxRangeSq + 1
 
-		local entries = getAmmoIndex(lootTable)
-		local best = {}
-		local bestCount = 0
-
-		for i = 1, #entries do
-			local entry = entries[i]
-			if canPickupAmmo(entry, fullClips) then
-				local pos = readEntry(entry, "Position")
-				if typeof(pos) == "Vector3" then
+		for _, child in folder:GetChildren() do
+			if isAmmoModel(child) and not isClipFull(child.Name) then
+				local pos = getModelPosition(child)
+				local id = getLootId(child)
+				if pos and id and not pickedCooldown[id] then
 					local delta = pos - origin
 					local distSq = delta.X * delta.X + delta.Y * delta.Y + delta.Z * delta.Z
-					if distSq <= maxRangeSq then
-						if bestCount < MAX_PICKUPS_PER_TICK then
-							bestCount += 1
-							best[bestCount] = { distSq = distSq, entry = entry }
-						else
-							local worstIdx = 1
-							local worstDist = best[1].distSq
-							for j = 2, bestCount do
-								if best[j].distSq > worstDist then
-									worstDist = best[j].distSq
-									worstIdx = j
-								end
-							end
-							if distSq < worstDist then
-								best[worstIdx] = { distSq = distSq, entry = entry }
-							end
-						end
+					if distSq <= maxRangeSq and distSq < closestDistSq then
+						closestDistSq = distSq
+						closestId = id
 					end
 				end
 			end
 		end
 
-		local now = tick()
-		pruneCooldowns(now)
-		for i = 1, bestCount do
-			tryPickup(best[i].entry, lootTable)
+		if closestId then
+			pruneCooldowns(tick())
+			tryPickup(closestId)
 		end
 	end
 
@@ -294,15 +235,8 @@ function Loot.create(ctx)
 		end
 		active = want
 		pickupAccum = 0
-		if want then
-			lootTableCache = nil
-			lootLookupFailedAt = 0
-			ammoIndexTime = 0
-			table.clear(ammoIndex)
-		else
-			lootTableCache = nil
-			ammoIndexTime = 0
-			table.clear(ammoIndex)
+		lootFolder = nil
+		if not want then
 			table.clear(pickedCooldown)
 		end
 	end
