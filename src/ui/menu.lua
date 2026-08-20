@@ -85,7 +85,7 @@ function Menu.create(ctx)
 		Flag = "PickupRange",
 		Value = defaults.PickupRange,
 		Min = 50,
-		Max = 1500,
+		Max = 2500,
 		Textbox = true,
 	})
 	pickupSec:AddSlider({
@@ -93,7 +93,7 @@ function Menu.create(ctx)
 		Flag = "PickupAllRange",
 		Value = defaults.PickupAllRange,
 		Min = 50,
-		Max = 5000,
+		Max = 2500,
 		Textbox = true,
 	})
 	pickupSec:AddButton({
