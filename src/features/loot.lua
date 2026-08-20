@@ -6,7 +6,7 @@ local INSTANT_RANGE = 14
 local MAX_RANGE = 2500
 local PICKUP_ALL_BATCH = 20
 local PICKUP_ALL_DELAY = 0.12
-local API_RETRY = 8
+local API_RETRY = 0.75
 
 function Loot.create(ctx)
 	local lp = ctx.lp
@@ -19,6 +19,10 @@ function Loot.create(ctx)
 	local pickupAllRunning = false
 	local pickUpFn
 	local lootTable
+	local lootModule
+	local getCurrentItemFn
+	local u18Index
+	local pickupKey
 	local apiReady = false
 	local apiLookupAt = 0
 	local gcScanned = false
@@ -34,15 +38,6 @@ function Loot.create(ctx)
 		return ammoCaps
 	end
 
-	local function getClientLootSpawn()
-		local ok, mod = pcall(function()
-			return require(RS.Modules.M3WS_FRAMEWORK.Modules.ClientLootSpawn)
-		end)
-		if ok then
-			return mod
-		end
-	end
-
 	local function isLootEntry(entry)
 		if type(entry) ~= "table" then
 			return false
@@ -53,67 +48,219 @@ function Loot.create(ctx)
 		return type(id) == "string" and #id > 8 and typeof(pos) == "Vector3" and type(typ) == "string"
 	end
 
-	local function resolvePickupApi()
-		if apiReady and pickUpFn and lootTable then
-			return true
+	local function countLootEntries(tbl)
+		if type(tbl) ~= "table" then
+			return 0
 		end
-		local now = tick()
-		if now - apiLookupAt < API_RETRY then
-			return false
+		local count = 0
+		for _, entry in tbl do
+			if isLootEntry(entry) then
+				count += 1
+			end
 		end
-		apiLookupAt = now
+		return count
+	end
 
-		local mod = getClientLootSpawn()
-		if mod and type(mod.AddLootDrop) == "function" then
-			for i = 1, 80 do
-				local ok, name, value = pcall(debug.getupvalue, mod.AddLootDrop, i)
+	local function isRemoteHandler(tbl)
+		return type(tbl) == "table" and type(tbl.InvokeServer) == "function" and type(tbl.FireServer) == "function"
+	end
+
+	local function getLootModule()
+		if lootModule then
+			return lootModule
+		end
+		local loaders = {
+			function()
+				return require(RS.Modules.M3WS_FRAMEWORK.Modules.ClientLootSpawn)
+			end,
+			function()
+				local ok, m3 = pcall(require, RS.Modules.M3WS_FRAMEWORK)
+				if ok and m3 and type(m3.GetModule) == "function" then
+					return m3.GetModule("ClientLootSpawn")
+				end
+			end,
+		}
+		for _, loader in loaders do
+			local ok, mod = pcall(loader)
+			if ok and type(mod) == "table" and type(mod.AddLootDrop) == "function" then
+				lootModule = mod
+				if type(mod.GetCurrentItem) == "function" then
+					getCurrentItemFn = mod.GetCurrentItem
+				end
+				return mod
+			end
+		end
+	end
+
+	local function findLootTable(mod)
+		local bestTable
+		local bestScore = -1
+		local scan = { mod.AddLootDrop, mod.GetItemByID, mod.GetCurrentItem }
+		for _, fn in scan do
+			if type(fn) ~= "function" then
+				continue
+			end
+			for i = 1, 100 do
+				local ok, name, value = pcall(debug.getupvalue, fn, i)
 				if not ok or not name then
 					break
 				end
-				if name == "u15" and type(value) == "table" then
-					lootTable = value
+				if type(value) == "table" then
+					local score = countLootEntries(value)
+					if name == "u15" then
+						return value
+					end
+					if score > bestScore then
+						bestScore = score
+						bestTable = value
+					end
+				end
+			end
+		end
+		if bestTable then
+			return bestTable
+		end
+		for i = 1, 100 do
+			local ok, name, value = pcall(debug.getupvalue, mod.AddLootDrop, i)
+			if not ok or not name then
+				break
+			end
+			if type(value) == "table" then
+				return value
+			end
+		end
+	end
+
+	local function findPickUpFn(tableRef)
+		if not tableRef or type(getgc) ~= "function" then
+			return
+		end
+		local bestFn
+		local bestScore = -1
+		for _, fn in getgc(true) do
+			if type(fn) ~= "function" then
+				continue
+			end
+			local hasLoot = false
+			local hasRemote = false
+			local hasBool = false
+			for i = 1, 100 do
+				local ok, _, value = pcall(debug.getupvalue, fn, i)
+				if not ok then
 					break
 				end
+				if value == tableRef then
+					hasLoot = true
+				end
+				if isRemoteHandler(value) then
+					hasRemote = true
+				end
+				if type(value) == "boolean" then
+					hasBool = true
+				end
 			end
-		end
-
-		if not pickUpFn and not gcScanned then
-			gcScanned = true
-			for _, fn in getgc(true) do
-				if type(fn) == "function" then
-					for i = 1, 80 do
-						local ok, name, value = pcall(debug.getupvalue, fn, i)
-						if not ok or not name then
-							break
-						end
-						if name == "u83" and type(value) == "function" then
-							pickUpFn = value
-							break
-						end
-					end
-					if pickUpFn then
-						break
-					end
+			if hasLoot and hasRemote then
+				local score = hasBool and 2 or 1
+				if score > bestScore then
+					bestScore = score
+					bestFn = fn
 				end
 			end
 		end
+		return bestFn
+	end
 
-		apiReady = pickUpFn ~= nil and lootTable ~= nil
+	local function cacheU18Index()
+		if u18Index or not getCurrentItemFn then
+			return
+		end
+		for i = 1, 20 do
+			local ok, _, value = pcall(debug.getupvalue, getCurrentItemFn, i)
+			if not ok then
+				break
+			end
+			if value == nil or type(value) == "table" then
+				u18Index = i
+				return
+			end
+		end
+		u18Index = 1
+	end
+
+	local function cachePickupKey()
+		if pickupKey then
+			return
+		end
+		local ok, key = pcall(function()
+			return Enum.KeyCode[lp:WaitForChild("Settings"):WaitForChild("Pick Up").Value]
+		end)
+		if ok and key then
+			pickupKey = key
+		else
+			pickupKey = Enum.KeyCode.E
+		end
+	end
+
+	local function pressPickupKey()
+		cachePickupKey()
+		local vim = game:GetService("VirtualInputManager")
+		pcall(function()
+			vim:SendKeyEvent(true, pickupKey, false, game)
+			task.wait(0.04)
+			vim:SendKeyEvent(false, pickupKey, false, game)
+		end)
+	end
+
+	local function canUsePickup()
+		return lootTable ~= nil and (pickUpFn ~= nil or (getCurrentItemFn ~= nil and u18Index ~= nil))
+	end
+
+	local function resolvePickupApi(force)
+		if apiReady and canUsePickup() then
+			return true
+		end
+		local now = tick()
+		if not force and now - apiLookupAt < API_RETRY then
+			return canUsePickup()
+		end
+		apiLookupAt = now
+
+		local mod = getLootModule()
+		if mod and not lootTable then
+			lootTable = findLootTable(mod)
+		end
+
+		if lootTable and not pickUpFn and not gcScanned and type(getgc) == "function" then
+			gcScanned = true
+			pickUpFn = findPickUpFn(lootTable)
+		end
+
+		cacheU18Index()
+		cachePickupKey()
+
+		apiReady = canUsePickup()
 		return apiReady
 	end
 
-	task.defer(resolvePickupApi)
+	task.spawn(function()
+		for _ = 1, 40 do
+			if resolvePickupApi(true) then
+				break
+			end
+			task.wait(1.5)
+		end
+	end)
 
 	local function unlockPickup()
 		if not pickUpFn then
 			return
 		end
-		for i = 1, 80 do
+		for i = 1, 100 do
 			local ok, name, value = pcall(debug.getupvalue, pickUpFn, i)
 			if not ok or not name then
 				break
 			end
-			if name == "u64" and value == false then
+			if type(value) == "boolean" and value == false then
 				pcall(debug.setupvalue, pickUpFn, i, true)
 			end
 		end
@@ -209,8 +356,23 @@ function Loot.create(ctx)
 		return math.clamp(allRange, INSTANT_RANGE, MAX_RANGE)
 	end
 
+	local function invokePickup(entry)
+		unlockPickup()
+		if pickUpFn then
+			return pcall(pickUpFn, entry, true)
+		end
+		if getCurrentItemFn and u18Index then
+			local ok = pcall(debug.setupvalue, getCurrentItemFn, u18Index, entry)
+			if ok then
+				pressPickupKey()
+				return true
+			end
+		end
+		return false
+	end
+
 	local function tryPickupEntry(entry)
-		if not resolvePickupApi() then
+		if not resolvePickupApi(true) then
 			return false
 		end
 		local id = rawget(entry, "ID")
@@ -221,8 +383,7 @@ function Loot.create(ctx)
 		if pickedCooldown[id] and now - pickedCooldown[id] < PICKUP_COOLDOWN then
 			return false
 		end
-		unlockPickup()
-		local ok = pcall(pickUpFn, entry, true)
+		local ok = invokePickup(entry)
 		if ok then
 			pickedCooldown[id] = now
 			return true
@@ -232,7 +393,7 @@ function Loot.create(ctx)
 	end
 
 	local function collectTargets(maxRangeSq, ammoOnly)
-		if not resolvePickupApi() or not lootTable then
+		if not resolvePickupApi(true) or not lootTable then
 			return {}
 		end
 		local root = getPlayerRoot()
@@ -274,7 +435,13 @@ function Loot.create(ctx)
 		if pickupAllRunning then
 			return 0, "busy"
 		end
-		if not resolvePickupApi() then
+		for _ = 1, 20 do
+			if resolvePickupApi(true) then
+				break
+			end
+			task.wait(0.5)
+		end
+		if not canUsePickup() then
 			return 0, "api"
 		end
 		pickupAllRunning = true
@@ -308,7 +475,7 @@ function Loot.create(ctx)
 			table.clear(pickedCooldown)
 			unlockPickup()
 		else
-			resolvePickupApi()
+			resolvePickupApi(true)
 		end
 	end
 
