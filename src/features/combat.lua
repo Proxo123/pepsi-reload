@@ -9,6 +9,36 @@ function Combat.create(ctx)
 	local fireHooks = {}
 	local spreadFnOriginals = {}
 
+	local function restoreSpreadHooks()
+		local stored = getgenv()._PepsiSpreadOriginals
+		if not stored or not hookfunction then
+			return
+		end
+		for fn, orig in stored do
+			pcall(function()
+				hookfunction(fn, orig)
+			end)
+		end
+		getgenv()._PepsiSpreadOriginals = nil
+		getgenv()._PepsiSpreadHooked = nil
+	end
+
+	local function restoreFireHooks()
+		local stored = getgenv()._PepsiFireHooks
+		if not stored then
+			return
+		end
+		for _, data in stored do
+			if data.mod and data.original then
+				data.mod.Fire = data.original
+			end
+		end
+		getgenv()._PepsiFireHooks = nil
+	end
+
+	restoreSpreadHooks()
+	restoreFireHooks()
+
 	local function getPredictedPos(part)
 		local lead = tonumber(ctx.flags.flagVal("AimPrediction", ctx.config.DEFAULTS.AimPrediction))
 			or ctx.config.DEFAULTS.AimPrediction
@@ -64,12 +94,17 @@ function Combat.create(ctx)
 	end
 
 	local function hookGunFiresOnce()
+		if getgenv()._PepsiFireHooks then
+			return
+		end
+		local stored = {}
 		local gf = RS.Modules.M3WS_FRAMEWORK.Services.GunService.GunFunctions
 		for _, child in gf:GetChildren() do
 			if child:IsA("ModuleScript") and not fireHooks[child] then
 				local ok, mod = pcall(require, child)
-				if ok and type(mod) == "table" and type(mod.Fire) == "function" then
+				if ok and type(mod) == "table" and type(mod.Fire) == "function" and not mod._PepsiFireWrapped then
 					local original = mod.Fire
+					mod._PepsiFireWrapped = true
 					mod.Fire = function(u14, p15)
 						if state.noSpreadActive then
 							local pgi = RS:FindFirstChild("PlayerGunInfo") and RS.PlayerGunInfo:FindFirstChild(lp.Name)
@@ -91,8 +126,12 @@ function Combat.create(ctx)
 						return original(u14, p15)
 					end
 					fireHooks[child] = { mod = mod, original = original }
+					table.insert(stored, fireHooks[child])
 				end
 			end
+		end
+		if #stored > 0 then
+			getgenv()._PepsiFireHooks = stored
 		end
 	end
 
@@ -100,9 +139,11 @@ function Combat.create(ctx)
 		for _, data in fireHooks do
 			if data.mod and data.original then
 				data.mod.Fire = data.original
+				data.mod._PepsiFireWrapped = nil
 			end
 		end
 		table.clear(fireHooks)
+		getgenv()._PepsiFireHooks = nil
 	end
 
 	local function refreshDirectionSpreadHook()
@@ -140,8 +181,22 @@ function Combat.create(ctx)
 		end
 	end
 
+	local function unhookGiveRandomSpread()
+		local stored = getgenv()._PepsiSpreadOriginals or spreadFnOriginals
+		if hookfunction and stored then
+			for fn, orig in stored do
+				pcall(function()
+					hookfunction(fn, orig)
+				end)
+			end
+		end
+		table.clear(spreadFnOriginals)
+		getgenv()._PepsiSpreadOriginals = nil
+		getgenv()._PepsiSpreadHooked = nil
+	end
+
 	local function hookGiveRandomSpreadOnce()
-		if next(spreadFnOriginals) then
+		if getgenv()._PepsiSpreadHooked or next(spreadFnOriginals) then
 			return
 		end
 		for _, fn in getgc(true) do
@@ -164,6 +219,10 @@ function Combat.create(ctx)
 				end
 			end
 		end
+		if next(spreadFnOriginals) then
+			getgenv()._PepsiSpreadOriginals = spreadFnOriginals
+			getgenv()._PepsiSpreadHooked = true
+		end
 	end
 
 	local function enableNoSpread()
@@ -183,6 +242,7 @@ function Combat.create(ctx)
 		state.noSpreadActive = false
 		if not state.silentAimActive then
 			unhookGunFires()
+			unhookGiveRandomSpread()
 		end
 		refreshDirectionSpreadHook()
 	end
@@ -219,6 +279,7 @@ function Combat.create(ctx)
 		state.silentTargetPart = nil
 		if not state.noSpreadActive then
 			unhookGunFires()
+			unhookGiveRandomSpread()
 		end
 		refreshDirectionSpreadHook()
 	end
@@ -277,6 +338,14 @@ function Combat.create(ctx)
 		disableNoSpread()
 		disableNoRecoil()
 		disableSilentAim()
+		unhookGiveRandomSpread()
+		unhookGunFires()
+		if state.rayNamecallRestore and hookmetamethod then
+			pcall(function()
+				hookmetamethod(game, "__namecall", state.rayNamecallRestore)
+			end)
+			state.rayNamecallRestore = nil
+		end
 		state.noSpreadFlagState = false
 		state.noRecoilFlagState = false
 		state.silentAimFlagState = false

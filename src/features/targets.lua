@@ -5,29 +5,39 @@ function Targets.create(ctx)
 	local lp = ctx.lp
 	local gameApi = ctx.game
 
-	local function getAimPart(char, root, head, isBot)
+	local cachedTargets = {}
+	local cacheTime = 0
+	local TARGET_CACHE_TTL = 0.05
+
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.IgnoreWater = true
+	local rayIgnoreList = {}
+	local rayIgnoreTime = 0
+
+	local function getAimPart(char, root, head, isBot, wsKnown)
 		if ctx.flags.flagVal("AimPart", "Head") == "Torso" then
 			return char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or root
 		end
 		if head and root then
-			if isBot or gameApi.isWorkspaceModel(char) then
+			if isBot or wsKnown then
 				if (head.Position - root.Position).Magnitude <= 50 then
 					return head
 				end
 			end
 		end
-		if head and not isBot and gameApi.isWorkspaceModel(char) and (head.Position - root.Position).Magnitude <= 3 then
+		if head and not isBot and wsKnown and (head.Position - root.Position).Magnitude <= 3 then
 			return head
 		end
 		return root
 	end
 
-	local function getLogicalParts(char, isBot, plr)
+	local function getLogicalParts(char, isBot, plr, wsModel)
 		if not char then
 			return
 		end
 		if not isBot and plr then
-			char = gameApi.pickBestModel(plr, char) or char
+			char = wsModel or gameApi.pickBestModel(plr, char) or char
 		end
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char.PrimaryPart
@@ -38,21 +48,22 @@ function Targets.create(ctx)
 			return
 		end
 		local head = char:FindFirstChild("Head")
-		local hiddenPlayer = not isBot and not gameApi.isWorkspaceModel(char)
+		local wsKnown = isBot or char.Parent == workspace or wsModel == char
+		local hiddenPlayer = not isBot and not wsKnown
 		local split = hiddenPlayer or not head
 		if not split and head and root and (head.Position - root.Position).Magnitude > 3 then
 			split = true
 		end
 		local headWorld = split and (root.Position + Vector3.new(0, 2.8, 0)) or head.Position
 		local feetWorld = root.Position - Vector3.new(0, 3.2, 0)
-		return hum, root, getAimPart(char, root, head, isBot), headWorld, feetWorld, char
+		return hum, root, getAimPart(char, root, head, isBot, wsKnown), headWorld, feetWorld, char
 	end
 
-	local function addPlayerTarget(list, seenPlayers, plr, char)
+	local function addPlayerTarget(list, seenPlayers, plr, char, wsModel)
 		if not plr or plr == lp or seenPlayers[plr.UserId] or gameApi.isPlayerDead(plr) then
 			return
 		end
-		local hum, root, aimPart, headWorld, feetWorld, bestChar = getLogicalParts(char, false, plr)
+		local hum, root, aimPart, headWorld, feetWorld, bestChar = getLogicalParts(char, false, plr, wsModel)
 		if not hum then
 			return
 		end
@@ -71,30 +82,41 @@ function Targets.create(ctx)
 		})
 	end
 
-	local function rayIgnore()
+	local function getRayIgnore()
+		local now = tick()
+		if now - rayIgnoreTime < 0.75 then
+			return rayIgnoreList
+		end
+		rayIgnoreTime = now
+		table.clear(rayIgnoreList)
 		local camera = ctx.camera
-		local t = { lp.Character, camera }
+		if lp.Character then
+			table.insert(rayIgnoreList, lp.Character)
+		end
+		if camera then
+			table.insert(rayIgnoreList, camera)
+		end
 		local wsMe = gameApi.findWorkspacePlayerModel(lp.Name)
 		if wsMe then
-			table.insert(t, wsMe)
+			table.insert(rayIgnoreList, wsMe)
 		end
 		local ig = workspace:FindFirstChild("Ignore")
 		if ig then
-			table.insert(t, ig)
+			table.insert(rayIgnoreList, ig)
 		end
-		return t
+		return rayIgnoreList
 	end
 
 	local function visible(origin, worldPos, char)
-		local params = RaycastParams.new()
-		params.FilterType = Enum.RaycastFilterType.Exclude
-		params.FilterDescendantsInstances = rayIgnore()
-		params.IgnoreWater = true
-		local result = workspace:Raycast(origin, worldPos - origin, params)
+		rayParams.FilterDescendantsInstances = getRayIgnore()
+		local result = workspace:Raycast(origin, worldPos - origin, rayParams)
 		if not result then
 			return true
 		end
-		local adornee = char and (gameApi.getHighlightAdornee(char) or char) or char
+		if not char then
+			return false
+		end
+		local adornee = char.Parent == workspace and char or gameApi.getHighlightAdornee(char)
 		return result.Instance and adornee and result.Instance:IsDescendantOf(adornee)
 	end
 
@@ -108,7 +130,7 @@ function Targets.create(ctx)
 		return ctx.flags.flagVal("PlayerColor", Color3.fromRGB(255, 70, 70))
 	end
 
-	local function collectTargets()
+	local function rebuildTargets()
 		local list = {}
 		if not (ctx.flags.flagOn("ESPEnabled") or ctx.flags.flagOn("AimEnabled") or ctx.flags.flagOn("SilentAim")) then
 			return list
@@ -116,17 +138,11 @@ function Targets.create(ctx)
 		local seenPlayers = {}
 		local wantPlayers = ctx.flags.flagOn("ShowPlayers") or ctx.flags.flagOn("AimEnabled") or ctx.flags.flagOn("SilentAim")
 		if wantPlayers then
-			for _, model in workspace:GetChildren() do
-				if model:IsA("Model") then
-					local plr = Players:FindFirstChild(model.Name)
-					if plr then
-						addPlayerTarget(list, seenPlayers, plr, model)
-					end
-				end
-			end
 			for _, plr in Players:GetPlayers() do
-				if not seenPlayers[plr.UserId] then
-					addPlayerTarget(list, seenPlayers, plr, gameApi.resolvePlayerModel(plr))
+				if plr ~= lp then
+					local wsModel = gameApi.findWorkspacePlayerModel(plr.Name)
+					local char = wsModel or plr.Character
+					addPlayerTarget(list, seenPlayers, plr, char, wsModel)
 				end
 			end
 		end
@@ -156,6 +172,20 @@ function Targets.create(ctx)
 		return list
 	end
 
+	local function collectTargets()
+		local now = tick()
+		if now - cacheTime < TARGET_CACHE_TTL then
+			return cachedTargets
+		end
+		cacheTime = now
+		cachedTargets = rebuildTargets()
+		return cachedTargets
+	end
+
+	local function invalidateTargetCache()
+		cacheTime = 0
+	end
+
 	local function isValidAimTarget(t)
 		if t.player and ctx.flags.flagOn("SquadCheck") and gameApi.isTeammate(t.player) then
 			return false
@@ -172,10 +202,14 @@ function Targets.create(ctx)
 		return true
 	end
 
+	table.insert(ctx.connections or {}, Players.PlayerAdded:Connect(invalidateTargetCache))
+	table.insert(ctx.connections or {}, Players.PlayerRemoving:Connect(invalidateTargetCache))
+
 	return {
 		visible = visible,
 		getColor = getColor,
 		collectTargets = collectTargets,
+		invalidateTargetCache = invalidateTargetCache,
 		isValidAimTarget = isValidAimTarget,
 	}
 end

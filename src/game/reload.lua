@@ -8,20 +8,30 @@ function Game.create(ctx)
 	local squadRefresh = 0
 	local teamMembers = {}
 	local teamRefresh = 0
+	local wsModelCache = {}
+	local wsCacheTime = 0
+	local WS_CACHE_TTL = 0.4
+
+	local function refreshWorkspaceCache()
+		local now = tick()
+		if now - wsCacheTime < WS_CACHE_TTL then
+			return
+		end
+		wsCacheTime = now
+		table.clear(wsModelCache)
+		for _, child in workspace:GetChildren() do
+			if child:IsA("Model") and child:FindFirstChildOfClass("Humanoid") then
+				wsModelCache[child.Name] = child
+			end
+		end
+	end
 
 	local function findWorkspacePlayerModel(name)
 		if not name then
 			return
 		end
-		local direct = workspace:FindFirstChild(name)
-		if direct and direct:IsA("Model") and direct:FindFirstChildOfClass("Humanoid") then
-			return direct
-		end
-		for _, inst in workspace:GetDescendants() do
-			if inst:IsA("Model") and inst.Name == name and inst:FindFirstChildOfClass("Humanoid") then
-				return inst
-			end
-		end
+		refreshWorkspaceCache()
+		return wsModelCache[name]
 	end
 
 	local function isLobbyPosition(pos)
@@ -35,22 +45,29 @@ function Game.create(ctx)
 		if not char then
 			return false
 		end
-		if char:IsDescendantOf(workspace) then
+		local parent = char.Parent
+		if parent == workspace then
 			return true
 		end
-		local bots = workspace:FindFirstChild("Bots")
-		if bots and char:IsDescendantOf(bots) then
-			return true
+		if parent then
+			local bots = workspace:FindFirstChild("Bots")
+			if bots and char:IsDescendantOf(bots) then
+				return true
+			end
+			if char:IsDescendantOf(workspace) then
+				return true
+			end
 		end
-		local ws = findWorkspacePlayerModel(char.Name)
-		return ws ~= nil
+		refreshWorkspaceCache()
+		return wsModelCache[char.Name] ~= nil
 	end
 
 	local function getHighlightAdornee(char)
 		if not char then
 			return
 		end
-		if char.Parent and char:IsDescendantOf(workspace) then
+		local parent = char.Parent
+		if parent == workspace or (parent and char:IsDescendantOf(workspace)) then
 			return char
 		end
 		return findWorkspacePlayerModel(char.Name) or char
@@ -114,7 +131,7 @@ function Game.create(ctx)
 	end
 
 	local function refreshSquad()
-		if tick() - squadRefresh < 1 then
+		if tick() - squadRefresh < 1.5 then
 			return
 		end
 		squadRefresh = tick()
@@ -148,7 +165,7 @@ function Game.create(ctx)
 	end
 
 	local function refreshTeam()
-		if tick() - teamRefresh < 1 then
+		if tick() - teamRefresh < 1.5 then
 			return
 		end
 		teamRefresh = tick()
@@ -198,23 +215,43 @@ function Game.create(ctx)
 		end
 	end
 
+	local teammateCache = {}
+	local teammateCacheTime = 0
+
 	local function isTeammate(player)
-		refreshSquad()
-		if squadMembers[player] then
-			return true
+		local now = tick()
+		if now - teammateCacheTime > 1.5 then
+			teammateCacheTime = now
+			table.clear(teammateCache)
+			refreshSquad()
+			refreshTeam()
+			for plr in squadMembers do
+				teammateCache[plr] = true
+			end
+			for plr in teamMembers do
+				teammateCache[plr] = true
+			end
 		end
-		refreshTeam()
-		return teamMembers[player] == true
+		return teammateCache[player] == true
 	end
 
+	local deadCache = {}
+	local deadCacheTime = 0
+
 	local function isPlayerDead(plr)
-		local info = RS:FindFirstChild("GameInfo") and RS.GameInfo:FindFirstChild("PlayerInfo")
-		if not info then
-			return false
+		local now = tick()
+		if now - deadCacheTime > 0.5 then
+			deadCacheTime = now
+			table.clear(deadCache)
+			local info = RS:FindFirstChild("GameInfo") and RS.GameInfo:FindFirstChild("PlayerInfo")
+			if info then
+				for _, entry in info:GetChildren() do
+					local dead = entry:FindFirstChild("Dead")
+					deadCache[entry.Name] = dead and dead.Value == true
+				end
+			end
 		end
-		local entry = info:FindFirstChild(plr.Name)
-		local dead = entry and entry:FindFirstChild("Dead")
-		return dead and dead.Value == true
+		return deadCache[plr.Name] == true
 	end
 
 	local function pickBestModel(plr, char)
@@ -236,6 +273,12 @@ function Game.create(ctx)
 		return pickBestModel(plr, plr.Character)
 	end
 
+	local function invalidateCaches()
+		wsCacheTime = 0
+		deadCacheTime = 0
+		teammateCacheTime = 0
+	end
+
 	return {
 		findWorkspacePlayerModel = findWorkspacePlayerModel,
 		isLobbyPosition = isLobbyPosition,
@@ -249,6 +292,7 @@ function Game.create(ctx)
 		isPlayerDead = isPlayerDead,
 		resolvePlayerModel = resolvePlayerModel,
 		pickBestModel = pickBestModel,
+		invalidateCaches = invalidateCaches,
 	}
 end
 

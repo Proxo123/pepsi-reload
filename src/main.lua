@@ -19,7 +19,7 @@ function Main.start(import)
 	local CoreGui = game:GetService("CoreGui")
 	local lp = Players.LocalPlayer
 
-	for _, step in { "PepsiReloadAim", "PepsiReloadAim_v12", "PepsiReloadAim_v13", "PepsiReloadAim_v14", Config.AIM_STEP } do
+	for _, step in { "PepsiReloadAim", "PepsiReloadAim_v12", "PepsiReloadAim_v13", "PepsiReloadAim_v14", "PepsiReloadAim_v15", Config.AIM_STEP } do
 		pcall(function()
 			RunService:UnbindFromRenderStep(step)
 		end)
@@ -73,6 +73,8 @@ function Main.start(import)
 	MenuMod.create(ctx)
 
 	local fovCircle = ctx.draw.drawing("Circle", { Filled = false, Thickness = 1, NumSides = 48, ZIndex = 4 })
+	local visAccum = 0
+	local VIS_INTERVAL = 1 / 30
 
 	local function unload()
 		ctx.state.aimTargetPart = nil
@@ -124,7 +126,7 @@ function Main.start(import)
 		ctx.aim.applyAim()
 	end)
 
-	local function update()
+	local function update(dt)
 		if library.IsGuiValid and not library.IsGuiValid() then
 			unload()
 			return
@@ -153,8 +155,26 @@ function Main.start(import)
 		ctx.state.aimTargetPart = aimTarget and aimTarget.aimPart or nil
 		local silentTarget = ctx.aim.getSilentTarget(targetList)
 		ctx.state.silentTargetPart = silentTarget and silentTarget.aimPart or nil
-		local seen = ctx.esp.update(targetList, origin, center, vp)
-		ctx.tracers.updateSilentHandTracer()
+
+		local seen = {}
+		local needVis = ctx.flags.flagOn("ESPEnabled")
+			or (ctx.flags.flagOn("SilentAim") and ctx.flags.flagOn("SilentHandTracer"))
+		if needVis then
+			visAccum += dt or (1 / 60)
+			if visAccum >= VIS_INTERVAL then
+				visAccum = 0
+				if ctx.flags.flagOn("ESPEnabled") then
+					seen = ctx.esp.update(targetList, origin, center, vp)
+				end
+				if ctx.flags.flagOn("SilentAim") and ctx.flags.flagOn("SilentHandTracer") then
+					ctx.tracers.updateSilentHandTracer()
+				end
+			elseif ctx.flags.flagOn("ESPEnabled") then
+				for _, t in ipairs(targetList) do
+					seen[t.key] = true
+				end
+			end
+		end
 		for key in pairs(ctx.drawings) do
 			if not seen[key] then
 				ctx.draw.clearKey(key)
@@ -167,8 +187,10 @@ function Main.start(import)
 	end))
 	table.insert(
 		ctx.connections,
-		RunService.RenderStepped:Connect(function()
-			local ok, err = pcall(update)
+		RunService.RenderStepped:Connect(function(dt)
+			local ok, err = pcall(function()
+				update(dt)
+			end)
 			if not ok and not ctx.state.renderWarned then
 				ctx.state.renderWarned = true
 				warn("[Pepsi Reload] " .. tostring(err))
