@@ -9,6 +9,9 @@ function Http.create(repoBase)
 			return cache[path]
 		end
 		local url = base .. path .. ".lua"
+		if getgenv().PEPSI_CACHE_BUST then
+			url ..= "?cb=" .. tostring(getgenv().PEPSI_CACHE_BUST)
+		end
 		local ok, src = pcall(game.HttpGet, game, url)
 		if not ok or type(src) ~= "string" then
 			error("[Pepsi Reload] HttpGet failed: " .. tostring(path))

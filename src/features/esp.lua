@@ -38,14 +38,14 @@ function Esp.create(ctx)
 				end
 				local tracerVis = ctx.flags.flagOn("ESPTracers") and feetPos and feetPos.Z > 0
 				draw.setVisible(pack.tracer, tracerVis)
-				if tracerVis then
+				if tracerVis and pack.tracer then
 					pack.tracer.Color = color
 					pack.tracer.From = Vector2.new(center.X, vp.Y)
 					pack.tracer.To = Vector2.new(feetPos.X, feetPos.Y)
 				end
 				local textVis = (ctx.flags.flagOn("ESPNames") or ctx.flags.flagOn("ESPDistance")) and labelPos and labelPos.Z > 0
 				draw.setVisible(pack.text, textVis)
-				if textVis then
+				if textVis and pack.text then
 					local label = ctx.flags.flagOn("ESPNames") and t.name or ""
 					if ctx.flags.flagOn("ESPDistance") then
 						label = label .. (label ~= "" and "\n" or "") .. string.format("[%d]", (t.root.Position - origin).Magnitude)
@@ -57,7 +57,7 @@ function Esp.create(ctx)
 				local hpVis = ctx.flags.flagOn("ESPHealth") and boxVis
 				draw.setVisible(pack.hp, hpVis)
 				draw.setVisible(pack.hpOut, hpVis)
-				if hpVis then
+				if hpVis and pack.hp and pack.hpOut then
 					local hp = math.clamp(t.hum.Health / math.max(t.hum.MaxHealth, 1), 0, 1)
 					local barX, bottom, top = x - 4, y + h, y + h * (1 - hp)
 					pack.hpOut.From = Vector2.new(barX, y)
