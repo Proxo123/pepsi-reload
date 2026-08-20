@@ -115,10 +115,6 @@ function Main.start(import)
 			ctx.state.silentTargetHead = nil
 			ctx.state.silentTargetChar = nil
 		end
-
-		if ctx.loot then
-			ctx.loot.tick()
-		end
 	end
 
 	local function runVisuals()
@@ -233,6 +229,9 @@ function Main.start(import)
 				ctx.combat.syncNoRecoilToggle()
 				ctx.combat.syncInstantReloadToggle()
 				ctx.combat.syncSilentAimToggle()
+				if ctx.loot then
+					ctx.loot.tick(dt)
+				end
 				if not needsLogic() then
 					return
 				end

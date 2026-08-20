@@ -1,8 +1,11 @@
 local Loot = {}
 
-local PICKUP_COOLDOWN = 0.4
-local MAX_PICKUPS_PER_TICK = 4
+local PICKUP_HZ = 6
+local PICKUP_COOLDOWN = 0.45
+local MAX_PICKUPS_PER_TICK = 2
 local INSTANT_RANGE = 14
+local LOOT_TABLE_RETRY = 12
+local AMMO_INDEX_REFRESH = 4
 
 function Loot.create(ctx)
 	local lp = ctx.lp
@@ -11,8 +14,12 @@ function Loot.create(ctx)
 	local remoteHandler
 	local ammoCaps
 	local lootTableCache
-	local lootTableTime = 0
+	local lootLookupFailedAt = 0
+	local ammoIndex = {}
+	local ammoIndexTime = 0
 	local pickedCooldown = {}
+	local pickupAccum = 0
+	local active = false
 
 	local function getRemoteHandler()
 		if remoteHandler then
@@ -43,21 +50,17 @@ function Loot.create(ctx)
 			and type(entry.ID) == "string"
 			and #entry.ID > 8
 			and typeof(entry.Position) == "Vector3"
-			and type(entry.type) == "string"
+			and entry.type == "Ammo"
 	end
 
-	local function findLootTable()
-		local now = tick()
-		if lootTableCache and now - lootTableTime < 1.5 then
-			return lootTableCache
-		end
+	local function scanLootTableOnce()
 		local best
 		local bestAmmo = 0
 		for _, value in getgc(true) do
 			if type(value) == "table" and not getmetatable(value) then
 				local ammoCount = 0
 				for _, entry in value do
-					if isLootEntry(entry) and entry.type == "Ammo" then
+					if isLootEntry(entry) then
 						ammoCount += 1
 					end
 				end
@@ -67,9 +70,41 @@ function Loot.create(ctx)
 				end
 			end
 		end
-		lootTableCache = bestAmmo > 0 and best or nil
-		lootTableTime = now
+		return bestAmmo > 0 and best or nil
+	end
+
+	local function getLootTable()
+		if lootTableCache then
+			return lootTableCache
+		end
+		local now = tick()
+		if now - lootLookupFailedAt < LOOT_TABLE_RETRY then
+			return
+		end
+		lootTableCache = scanLootTableOnce()
+		lootLookupFailedAt = now
+		ammoIndexTime = 0
 		return lootTableCache
+	end
+
+	local function refreshAmmoIndex(lootTable)
+		table.clear(ammoIndex)
+		for _, entry in lootTable do
+			if isLootEntry(entry) and not entry.Ignore and not entry.OPEN then
+				if not entry.Ball or entry.Ball.Parent then
+					ammoIndex[#ammoIndex + 1] = entry
+				end
+			end
+		end
+		ammoIndexTime = tick()
+	end
+
+	local function getAmmoIndex(lootTable)
+		local now = tick()
+		if #ammoIndex == 0 or now - ammoIndexTime >= AMMO_INDEX_REFRESH then
+			refreshAmmoIndex(lootTable)
+		end
+		return ammoIndex
 	end
 
 	local function getPlayerRoot()
@@ -88,30 +123,30 @@ function Loot.create(ctx)
 		return char:FindFirstChild("HumanoidRootPart")
 	end
 
-	local function canPickupAmmo(entry)
-		if entry.type ~= "Ammo" or entry.Ignore or entry.OPEN then
-			return false
+	local function getClipState()
+		local char = lp.Character
+		local clips = char and char:FindFirstChild("AmmoClips")
+		if not clips then
+			return
 		end
+		local caps = getAmmoCaps()
+		local full = {}
+		for _, clip in clips:GetChildren() do
+			if clip:IsA("ValueBase") then
+				local cap = caps and caps[clip.Name]
+				if cap and clip.Value >= cap then
+					full[clip.Name] = true
+				end
+			end
+		end
+		return full
+	end
+
+	local function canPickupAmmo(entry, fullClips)
 		if entry.Chest or entry.AmmoBox or entry.AirDrop then
 			return false
 		end
-		if entry.Ball and not entry.Ball.Parent then
-			return false
-		end
-		local char = lp.Character
-		if not char then
-			return false
-		end
-		local clips = char:FindFirstChild("AmmoClips")
-		if not clips or not entry.Name then
-			return false
-		end
-		local clip = clips:FindFirstChild(entry.Name)
-		if not clip then
-			return false
-		end
-		local caps = getAmmoCaps()
-		if caps and caps[entry.Name] and clip.Value >= caps[entry.Name] then
+		if not entry.Name or fullClips[entry.Name] then
 			return false
 		end
 		return true
@@ -137,62 +172,112 @@ function Loot.create(ctx)
 		return false
 	end
 
-	local function getMaxRange()
+	local function getMaxRangeSq()
 		local instant = ctx.flags.flagOn("InstantPickup")
 		local far = ctx.flags.flagOn("FarPickup")
 		if not instant and not far then
 			return 0
 		end
-		local range = 0
-		if instant then
-			range = INSTANT_RANGE
-		end
+		local range = instant and INSTANT_RANGE or 0
 		if far then
 			local farRange = tonumber(ctx.flags.flagVal("PickupRange", ctx.config.DEFAULTS.PickupRange))
 				or ctx.config.DEFAULTS.PickupRange
 			range = math.max(range, farRange)
 		end
-		return range
+		return range * range
 	end
 
-	local function tickPickup()
-		if not ctx.flags.flagOn("InstantPickup") and not ctx.flags.flagOn("FarPickup") then
-			return
+	local function pruneCooldowns(now)
+		for id, time in pickedCooldown do
+			if now - time > 8 then
+				pickedCooldown[id] = nil
+			end
 		end
+	end
+
+	local function runPickup()
 		local root = getPlayerRoot()
 		if not root then
 			return
 		end
-		local lootTable = findLootTable()
+		local lootTable = getLootTable()
 		if not lootTable then
 			return
 		end
-		local maxRange = getMaxRange()
-		if maxRange <= 0 then
+		local maxRangeSq = getMaxRangeSq()
+		if maxRangeSq <= 0 then
 			return
 		end
+
 		local origin = root.Position
-		local candidates = {}
-		for _, entry in lootTable do
-			if canPickupAmmo(entry) then
-				local dist = (entry.Position - origin).Magnitude
-				if dist <= maxRange then
-					table.insert(candidates, { dist = dist, entry = entry })
+		local fullClips = getClipState()
+		if not fullClips then
+			return
+		end
+
+		local entries = getAmmoIndex(lootTable)
+		local best = {}
+		local bestCount = 0
+
+		for i = 1, #entries do
+			local entry = entries[i]
+			if canPickupAmmo(entry, fullClips) then
+				local delta = entry.Position - origin
+				local distSq = delta.X * delta.X + delta.Y * delta.Y + delta.Z * delta.Z
+				if distSq <= maxRangeSq then
+					if bestCount < MAX_PICKUPS_PER_TICK then
+						bestCount += 1
+						best[bestCount] = { distSq = distSq, entry = entry }
+					else
+						local worstIdx = 1
+						local worstDist = best[1].distSq
+						for j = 2, bestCount do
+							if best[j].distSq > worstDist then
+								worstDist = best[j].distSq
+								worstIdx = j
+							end
+						end
+						if distSq < worstDist then
+							best[worstIdx] = { distSq = distSq, entry = entry }
+						end
+					end
 				end
 			end
 		end
-		table.sort(candidates, function(a, b)
-			return a.dist < b.dist
-		end)
-		local picked = 0
-		for _, item in candidates do
-			if picked >= MAX_PICKUPS_PER_TICK then
-				break
-			end
-			if tryPickup(item.entry) then
-				picked += 1
-			end
+
+		local now = tick()
+		pruneCooldowns(now)
+		for i = 1, bestCount do
+			tryPickup(best[i].entry)
 		end
+	end
+
+	local function setActive(want)
+		if want == active then
+			return
+		end
+		active = want
+		pickupAccum = 0
+		if not want then
+			lootTableCache = nil
+			ammoIndexTime = 0
+			table.clear(ammoIndex)
+			table.clear(pickedCooldown)
+		end
+	end
+
+	local function tickPickup(dt)
+		local want = ctx.flags.flagOn("InstantPickup") or ctx.flags.flagOn("FarPickup")
+		setActive(want)
+		if not want then
+			return
+		end
+		pickupAccum += dt
+		if pickupAccum < (1 / PICKUP_HZ) then
+			return
+		end
+		pickupAccum = 0
+		runPickup()
 	end
 
 	return {
