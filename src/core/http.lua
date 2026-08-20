@@ -5,8 +5,9 @@ function Http.create(repoBase)
 	local base = repoBase
 
 	local function import(path)
-		if cache[path] then
-			return cache[path]
+		local cacheKey = path .. ":" .. tostring(getgenv().PEPSI_CACHE_BUST or "1")
+		if cache[cacheKey] then
+			return cache[cacheKey]
 		end
 		local url = base .. path .. ".lua"
 		if getgenv().PEPSI_CACHE_BUST then
@@ -21,7 +22,7 @@ function Http.create(repoBase)
 			error("[Pepsi Reload] loadstring failed: " .. tostring(path) .. " -> " .. tostring(err))
 		end
 		local mod = fn()
-		cache[path] = mod
+		cache[cacheKey] = mod
 		return mod
 	end
 

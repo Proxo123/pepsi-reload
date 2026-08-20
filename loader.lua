@@ -10,8 +10,9 @@ if getgenv()._PepsiReloadUnload then
 	pcall(getgenv()._PepsiReloadUnload)
 end
 
--- CHANGE THIS after creating your GitHub repo:
-local REPO = "https://raw.githubusercontent.com/Proxo123/pepsi-reload/main/"
+-- Pinned commit so Roblox HttpGet does not serve stale branch cache
+local COMMIT = "15668bb"
+local REPO = "https://raw.githubusercontent.com/Proxo123/pepsi-reload/" .. COMMIT .. "/"
 
 getgenv().PEPSI_REPO = REPO
 getgenv().PEPSI_CACHE_BUST = "v20"
