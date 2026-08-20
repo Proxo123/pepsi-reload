@@ -106,8 +106,8 @@ function Menu.create(ctx)
 				end
 				local text = "Picked up " .. tostring(count) .. " drops"
 				if count == 0 and reason == "api" then
-					text = "Pickup not ready yet, try again in a few seconds"
-				elseif count == 0 then
+					text = "Pickup remote not found"
+				elseif count == 0 and reason == "empty" then
 					text = "No drops in range"
 				end
 				pcall(function()
