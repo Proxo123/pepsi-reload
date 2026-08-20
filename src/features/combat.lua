@@ -37,30 +37,40 @@ function Combat.create(ctx)
 	end
 
 	local function uninstallSilentRayHook()
-		if state.silentRayRestore then
-			workspace.FindPartOnRayWithIgnoreList = state.silentRayRestore
-			state.silentRayRestore = nil
+		if state.silentRayRestore and hookfunction then
+			pcall(function()
+				hookfunction(workspace.FindPartOnRayWithIgnoreList, state.silentRayRestore)
+			end)
 		end
+		state.silentRayRestore = nil
+		state.silentRayHooked = false
 		state.inSilentFire = false
 		state.silentRayIndex = 0
 	end
 
 	local function installSilentRayHook()
-		if state.silentRayRestore then
+		if state.silentRayHooked or not hookfunction then
 			return
 		end
-		state.silentRayRestore = workspace.FindPartOnRayWithIgnoreList
-		workspace.FindPartOnRayWithIgnoreList = function(self, ray, ignoreList, ...)
-			if state.inSilentFire and state.silentTargetPart then
-				state.silentRayIndex = (state.silentRayIndex or 0) + 1
-				if state.silentRayIndex == 1 then
-					local part = state.silentTargetPart
-					if part and part.Position then
-						return part, part.Position, Vector3.new(0, 1, 0)
+		local original
+		local ok, hooked = pcall(function()
+			original = hookfunction(workspace.FindPartOnRayWithIgnoreList, function(self, ray, ignoreList, ...)
+				if state.inSilentFire and state.silentTargetPart then
+					state.silentRayIndex = (state.silentRayIndex or 0) + 1
+					if state.silentRayIndex == 1 then
+						local part = state.silentTargetPart
+						if part and part.Position then
+							return part, part.Position, Vector3.new(0, 1, 0)
+						end
 					end
 				end
-			end
-			return state.silentRayRestore(self, ray, ignoreList, ...)
+				return original(self, ray, ignoreList, ...)
+			end)
+			return original
+		end)
+		if ok and hooked then
+			state.silentRayRestore = hooked
+			state.silentRayHooked = true
 		end
 	end
 

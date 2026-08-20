@@ -1,6 +1,6 @@
 -- Update REPO after pushing to GitHub (raw.githubusercontent.com user/repo/branch/)
 return {
-	VERSION = "v22-modular",
+	VERSION = "v22b-modular",
 	REPO = "https://raw.githubusercontent.com/Proxo123/pepsi-reload/main/",
 	AIM_STEP = "PepsiReloadAim_v22",
 	LIBRARY_ID = "rbxassetid://7657867786",
