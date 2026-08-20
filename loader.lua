@@ -14,7 +14,7 @@ end
 local REPO = "https://raw.githubusercontent.com/Proxo123/pepsi-reload/main/"
 
 getgenv().PEPSI_REPO = REPO
-getgenv().PEPSI_CACHE_BUST = "v18"
+getgenv().PEPSI_CACHE_BUST = "v19"
 
 local ok, err = pcall(function()
 	loadstring(game:HttpGet(REPO .. "src/bootstrap.lua"))()

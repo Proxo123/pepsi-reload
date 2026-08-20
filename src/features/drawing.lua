@@ -1,6 +1,8 @@
-local Drawing = {}
+local DrawLib = Drawing
 
-function Drawing.create(ctx)
+local DrawingModule = {}
+
+function DrawingModule.create(ctx)
 	local CoreGui = ctx.services.CoreGui
 
 	local function guiParent()
@@ -13,7 +15,7 @@ function Drawing.create(ctx)
 	local function drawing(class, props)
 		local obj
 		local ok = pcall(function()
-			obj = Drawing.new(class)
+			obj = DrawLib.new(class)
 		end)
 		if not ok or not obj then
 			return nil
@@ -167,4 +169,4 @@ function Drawing.create(ctx)
 	}
 end
 
-return Drawing
+return DrawingModule

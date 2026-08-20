@@ -19,7 +19,7 @@ function Main.start(import)
 	local CoreGui = game:GetService("CoreGui")
 	local lp = Players.LocalPlayer
 
-	for _, step in { "PepsiReloadAim", "PepsiReloadAim_v12", "PepsiReloadAim_v13", "PepsiReloadAim_v14", "PepsiReloadAim_v15", "PepsiReloadAim_v16", Config.AIM_STEP } do
+	for _, step in { "PepsiReloadAim", "PepsiReloadAim_v12", "PepsiReloadAim_v13", "PepsiReloadAim_v14", "PepsiReloadAim_v15", "PepsiReloadAim_v16", "PepsiReloadAim_v17", "PepsiReloadAim_v18", Config.AIM_STEP } do
 		pcall(function()
 			RunService:UnbindFromRenderStep(step)
 		end)

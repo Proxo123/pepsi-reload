@@ -12,8 +12,12 @@ function Flags.make(libraryFlags, defaults)
 		return v
 	end
 
-	local function flagOn(name)
-		return flagVal(name, false) == true
+	local function flagOn(name, default)
+		if default == nil then
+			default = false
+		end
+		local v = flagVal(name, default)
+		return v == true
 	end
 
 	return {
