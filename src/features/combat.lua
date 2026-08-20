@@ -51,10 +51,34 @@ function Combat.create(ctx)
 		local old
 		old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
 			local method = getnamecallmethod()
-			if state.silentRayState and self == workspace and method == "FindPartOnRayWithIgnoreList" then
-				state.silentRayState.count = (state.silentRayState.count or 0) + 1
-				if state.silentRayState.count == 1 then
-					return state.silentRayState.part, state.silentRayState.pos, state.silentRayState.normal
+			if state.silentRayState and self == workspace then
+				if method == "FindPartOnRayWithIgnoreList" then
+					state.silentRayState.count = (state.silentRayState.count or 0) + 1
+					local redirect = state.silentRayState.wallbang or state.silentRayState.count == 1
+					if redirect then
+						return state.silentRayState.part, state.silentRayState.pos, state.silentRayState.normal
+					end
+				elseif method == "Raycast" and state.silentRayState.wallbang then
+					local args = { ... }
+					local origin = args[1]
+					local direction = args[2]
+					if typeof(origin) ~= "Vector3" then
+						origin = args[2]
+						direction = args[3]
+					end
+					if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" and direction.Magnitude > 0.01 then
+						local hitDist = (state.silentRayState.pos - origin).Magnitude
+						local maxDist = direction.Magnitude
+						if hitDist <= maxDist then
+							return {
+								Instance = state.silentRayState.part,
+								Position = state.silentRayState.pos,
+								Normal = state.silentRayState.normal,
+								Material = Enum.Material.Plastic,
+								Distance = hitDist,
+							}
+						end
+					end
 				end
 			end
 			return old(self, ...)
@@ -77,6 +101,7 @@ function Combat.create(ctx)
 			pos = targetPos,
 			normal = normal,
 			count = 0,
+			wallbang = ctx.flags.flagOn("Wallbang"),
 		}
 		local ok, err = pcall(original, u14, p15)
 		state.silentRayState = nil

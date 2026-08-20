@@ -54,6 +54,7 @@ function Menu.create(ctx)
 
 	silentMain:AddToggle({ Name = "Enabled", Flag = "SilentAim", Value = false })
 	silentMain:AddToggle({ Name = "Target Tracer", Flag = "SilentHandTracer", Value = false })
+	silentMain:AddToggle({ Name = "Wallbang", Flag = "Wallbang", Value = false })
 
 	silentSet:AddSlider({
 		Name = "Silent FOV",

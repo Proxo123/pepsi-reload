@@ -153,7 +153,7 @@ function Aim.create(ctx)
 		local angleFov = tonumber(ctx.flags.flagVal("SilentAngleFOV", ctx.config.DEFAULTS.SilentAngleFOV))
 			or ctx.config.DEFAULTS.SilentAngleFOV
 		local center = ctx.camera.ViewportSize * 0.5
-		local wallCheck = ctx.flags.flagOn("AimWallCheck")
+		local wallCheck = ctx.flags.flagOn("AimWallCheck") and not ctx.flags.flagOn("Wallbang")
 		local best, bestDist
 		for _, t in ipairs(targetList) do
 			if targetsApi.isValidAimTarget(t) then
