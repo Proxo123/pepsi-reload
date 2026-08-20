@@ -88,6 +88,28 @@ function Menu.create(ctx)
 		Max = 1500,
 		Textbox = true,
 	})
+	pickupSec:AddSlider({
+		Name = "Pickup All Range",
+		Flag = "PickupAllRange",
+		Value = defaults.PickupAllRange,
+		Min = 50,
+		Max = 5000,
+		Textbox = true,
+	})
+	pickupSec:AddButton({
+		Name = "Pickup All Drops",
+		Callback = function()
+			task.spawn(function()
+				local count = ctx.loot and ctx.loot.pickupAll() or 0
+				pcall(function()
+					ctx.library:Notify({
+						Text = "Sent pickup for " .. tostring(count) .. " drops",
+						Time = 4,
+					})
+				end)
+			end)
+		end,
+	})
 
 	espMain:AddToggle({
 		Name = "Enabled",

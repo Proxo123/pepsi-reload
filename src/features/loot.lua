@@ -4,14 +4,16 @@ local PICKUP_HZ = 4
 local PICKUP_COOLDOWN = 0.6
 local MAX_PICKUPS_PER_TICK = 1
 local INSTANT_RANGE = 14
+local PICKUP_ALL_BATCH = 35
+local PICKUP_ALL_DELAY = 0.04
 
-local FALLBACK_AMMO = {
-	["Light Ammo"] = true,
-	["Medium Ammo"] = true,
-	["Heavy Ammo"] = true,
-	["Shells"] = true,
-	["Rocket Ammo"] = true,
-	["Arrow"] = true,
+local LOOT_AMMO_SHORT = {
+	Light = "Light Ammo",
+	Medium = "Medium Ammo",
+	Heavy = "Heavy Ammo",
+	Rocket = "Rocket Ammo",
+	Shells = "Shells",
+	Arrow = "Arrow",
 }
 
 function Loot.create(ctx)
@@ -20,11 +22,11 @@ function Loot.create(ctx)
 
 	local remoteHandler
 	local ammoCaps
-	local ammoNames = {}
 	local pickedCooldown = {}
 	local pickupAccum = 0
 	local active = false
 	local lootFolder
+	local pickupAllRunning = false
 
 	local function getRemoteHandler()
 		if remoteHandler then
@@ -50,24 +52,6 @@ function Loot.create(ctx)
 		return ammoCaps
 	end
 
-	local function loadAmmoNames()
-		if next(ammoNames) then
-			return ammoNames
-		end
-		for name in FALLBACK_AMMO do
-			ammoNames[name] = true
-		end
-		local caps = getAmmoCaps()
-		if caps then
-			for name in caps do
-				if type(name) == "string" then
-					ammoNames[name] = true
-				end
-			end
-		end
-		return ammoNames
-	end
-
 	local function getLootFolder()
 		if lootFolder and lootFolder.Parent then
 			return lootFolder
@@ -87,6 +71,9 @@ function Loot.create(ctx)
 	end
 
 	local function getLootId(model)
+		if not model then
+			return
+		end
 		local id = model:GetAttribute("ID")
 		if type(id) == "string" and #id > 8 then
 			return id
@@ -101,8 +88,14 @@ function Loot.create(ctx)
 				return child.Value
 			end
 		end
-		if model.Name:match("^[%w%-]+$") and #model.Name > 20 then
-			return model.Name
+	end
+
+	local function getAmmoClipName(modelName)
+		if LOOT_AMMO_SHORT[modelName] then
+			return LOOT_AMMO_SHORT[modelName]
+		end
+		if modelName:find("Ammo", 1, true) then
+			return modelName
 		end
 	end
 
@@ -110,11 +103,55 @@ function Loot.create(ctx)
 		if not model:IsA("Model") then
 			return false
 		end
-		local names = loadAmmoNames()
-		if names[model.Name] then
+		return getAmmoClipName(model.Name) ~= nil
+	end
+
+	local function isWoodFull()
+		local inv = RS:FindFirstChild("PlayersInventory") and RS.PlayersInventory:FindFirstChild(lp.Name)
+		local cap = RS:FindFirstChild("GameInfo") and RS.GameInfo:FindFirstChild("WoodCap")
+		if not inv or not cap then
+			return false
+		end
+		local wood = inv:FindFirstChild("Wood")
+		return wood and wood.Value >= cap.Value
+	end
+
+	local function isClipFull(clipName)
+		if not clipName then
+			return false
+		end
+		local char = lp.Character
+		local clips = char and char:FindFirstChild("AmmoClips")
+		if not clips then
 			return true
 		end
-		return model.Name:find("Ammo", 1, true) ~= nil
+		local clip = clips:FindFirstChild(clipName)
+		if not clip then
+			return true
+		end
+		local caps = getAmmoCaps()
+		local cap = caps and caps[clipName]
+		if cap and clip.Value >= cap then
+			return true
+		end
+		return false
+	end
+
+	local function canPickupModel(model)
+		if not model:IsA("Model") then
+			return false
+		end
+		if model:GetAttribute("OPEN") == true then
+			return false
+		end
+		if model.Name == "Wood" and isWoodFull() then
+			return false
+		end
+		local clipName = getAmmoClipName(model.Name)
+		if clipName and isClipFull(clipName) then
+			return false
+		end
+		return getLootId(model) ~= nil
 	end
 
 	local function getPlayerRoot()
@@ -131,24 +168,6 @@ function Loot.create(ctx)
 			return
 		end
 		return char:FindFirstChild("HumanoidRootPart")
-	end
-
-	local function isClipFull(ammoName)
-		local char = lp.Character
-		local clips = char and char:FindFirstChild("AmmoClips")
-		if not clips or not ammoName then
-			return true
-		end
-		local clip = clips:FindFirstChild(ammoName)
-		if not clip then
-			return true
-		end
-		local caps = getAmmoCaps()
-		local cap = caps and caps[ammoName]
-		if cap and clip.Value >= cap then
-			return true
-		end
-		return false
 	end
 
 	local function tryPickup(id)
@@ -185,48 +204,71 @@ function Loot.create(ctx)
 		return range * range
 	end
 
-	local function pruneCooldowns(now)
-		for id, time in pickedCooldown do
-			if now - time > 10 then
-				pickedCooldown[id] = nil
-			end
-		end
+	local function getPickupAllRange()
+		return tonumber(ctx.flags.flagVal("PickupAllRange", ctx.config.DEFAULTS.PickupAllRange))
+			or ctx.config.DEFAULTS.PickupAllRange
 	end
 
-	local function runPickup()
+	local function collectTargets(maxRangeSq, ammoOnly)
 		local folder = getLootFolder()
 		local root = getPlayerRoot()
 		if not folder or not root then
-			return
+			return {}
 		end
-		local maxRangeSq = getMaxRangeSq()
-		if maxRangeSq <= 0 then
-			return
-		end
-
 		local origin = root.Position
-		local closestId
-		local closestDistSq = maxRangeSq + 1
-
+		local targets = {}
 		for _, child in folder:GetChildren() do
-			if isAmmoModel(child) and not isClipFull(child.Name) then
+			if canPickupModel(child) and (not ammoOnly or isAmmoModel(child)) then
 				local pos = getModelPosition(child)
 				local id = getLootId(child)
-				if pos and id and not pickedCooldown[id] then
+				if pos and id then
 					local delta = pos - origin
 					local distSq = delta.X * delta.X + delta.Y * delta.Y + delta.Z * delta.Z
-					if distSq <= maxRangeSq and distSq < closestDistSq then
-						closestDistSq = distSq
-						closestId = id
+					if distSq <= maxRangeSq then
+						targets[#targets + 1] = { id = id, distSq = distSq }
 					end
 				end
 			end
 		end
+		table.sort(targets, function(a, b)
+			return a.distSq < b.distSq
+		end)
+		return targets
+	end
 
-		if closestId then
-			pruneCooldowns(tick())
-			tryPickup(closestId)
+	local function runPickup()
+		local maxRangeSq = getMaxRangeSq()
+		if maxRangeSq <= 0 then
+			return
 		end
+		local targets = collectTargets(maxRangeSq, true)
+		if targets[1] then
+			tryPickup(targets[1].id)
+		end
+	end
+
+	local function pickupAll()
+		if pickupAllRunning then
+			return 0
+		end
+		pickupAllRunning = true
+		local tried = 0
+		local ok, err = pcall(function()
+			local range = getPickupAllRange()
+			local targets = collectTargets(range * range, false)
+			for i = 1, math.min(#targets, PICKUP_ALL_BATCH) do
+				tryPickup(targets[i].id)
+				tried += 1
+				if i % 4 == 0 then
+					task.wait(PICKUP_ALL_DELAY)
+				end
+			end
+		end)
+		pickupAllRunning = false
+		if not ok then
+			warn("[Pepsi Reload] Pickup all failed:", err)
+		end
+		return tried
 	end
 
 	local function setActive(want)
@@ -257,6 +299,7 @@ function Loot.create(ctx)
 
 	return {
 		tick = tickPickup,
+		pickupAll = pickupAll,
 	}
 end
 
