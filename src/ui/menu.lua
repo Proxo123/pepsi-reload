@@ -100,10 +100,19 @@ function Menu.create(ctx)
 		Name = "Pickup All Drops",
 		Callback = function()
 			task.spawn(function()
-				local count = ctx.loot and ctx.loot.pickupAll() or 0
+				local count, reason = 0
+				if ctx.loot and ctx.loot.pickupAll then
+					count, reason = ctx.loot.pickupAll()
+				end
+				local text = "Picked up " .. tostring(count) .. " drops"
+				if count == 0 and reason == "api" then
+					text = "Pickup not ready yet, try again in a few seconds"
+				elseif count == 0 then
+					text = "No drops in range"
+				end
 				pcall(function()
 					ctx.library:Notify({
-						Text = "Sent pickup for " .. tostring(count) .. " drops",
+						Text = text,
 						Time = 4,
 					})
 				end)
