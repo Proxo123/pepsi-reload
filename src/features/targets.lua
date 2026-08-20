@@ -7,7 +7,7 @@ function Targets.create(ctx)
 
 	local cachedTargets = {}
 	local cacheTime = 0
-	local TARGET_CACHE_TTL = 0.15
+	local TARGET_CACHE_TTL = 0.05
 
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude

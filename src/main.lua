@@ -76,7 +76,7 @@ function Main.start(import)
 
 	local fovCircle = ctx.draw.drawing("Circle", { Filled = false, Thickness = 1, NumSides = 48, ZIndex = 4 })
 	local logicAccum = 0
-	local LOGIC_HZ = 20
+	local LOGIC_HZ = 30
 
 	local function needsLogic()
 		return ctx.flags.flagOn("ESPEnabled")
