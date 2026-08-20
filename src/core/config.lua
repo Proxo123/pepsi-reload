@@ -6,7 +6,6 @@ return {
 	LIBRARY_ID = "rbxassetid://7657867786",
 	DEFAULTS = {
 		AimSmoothness = 1,
-		AimPrediction = 0.12,
 		AimFOV = 120,
 		SilentFOV = 500,
 		SilentAngleFOV = 45,

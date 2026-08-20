@@ -40,16 +40,7 @@ function Combat.create(ctx)
 	restoreFireHooks()
 
 	local function getPredictedPos(part)
-		local lead = tonumber(ctx.flags.flagVal("AimPrediction", ctx.config.DEFAULTS.AimPrediction))
-			or ctx.config.DEFAULTS.AimPrediction
-		local vel = Vector3.zero
-		pcall(function()
-			vel = part.AssemblyLinearVelocity
-			if vel.Magnitude < 0.05 then
-				vel = part.Velocity
-			end
-		end)
-		return part.Position + vel * lead
+		return part.Position
 	end
 
 	local function hookGunFiresOnce()

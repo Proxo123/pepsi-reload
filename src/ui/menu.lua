@@ -49,15 +49,6 @@ function Menu.create(ctx)
 		Precise = 2,
 		Textbox = true,
 	})
-	aimSet:AddSlider({
-		Name = "Prediction",
-		Flag = "AimPrediction",
-		Value = defaults.AimPrediction,
-		Min = 0,
-		Max = 0.35,
-		Precise = 2,
-		Textbox = true,
-	})
 	aimSet:AddSlider({ Name = "FOV", Flag = "AimFOV", Value = defaults.AimFOV, Min = 10, Max = 500, Textbox = true })
 	aimSet:AddSlider({ Name = "Range", Flag = "AimRange", Value = defaults.AimRange, Min = 50, Max = 2500, Textbox = true })
 
