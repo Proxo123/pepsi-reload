@@ -88,37 +88,6 @@ function Menu.create(ctx)
 		Max = 2500,
 		Textbox = true,
 	})
-	pickupSec:AddSlider({
-		Name = "Pickup All Range",
-		Flag = "PickupAllRange",
-		Value = defaults.PickupAllRange,
-		Min = 50,
-		Max = 2500,
-		Textbox = true,
-	})
-	pickupSec:AddButton({
-		Name = "Pickup All Drops",
-		Callback = function()
-			task.spawn(function()
-				local count, reason = 0
-				if ctx.loot and ctx.loot.pickupAll then
-					count, reason = ctx.loot.pickupAll()
-				end
-				local text = "Picked up " .. tostring(count) .. " drops"
-				if count == 0 and reason == "api" then
-					text = "Pickup remote not found"
-				elseif count == 0 and reason == "empty" then
-					text = "No drops in range"
-				end
-				pcall(function()
-					ctx.library:Notify({
-						Text = text,
-						Time = 4,
-					})
-				end)
-			end)
-		end,
-	})
 
 	espMain:AddToggle({
 		Name = "Enabled",
