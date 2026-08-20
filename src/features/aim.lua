@@ -20,8 +20,12 @@ function Aim.create(ctx)
 		return UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
 	end
 
+	local function partAlive(part)
+		return part and part.Position
+	end
+
 	local function screenScore(part, origin, center, fov, range)
-		if not part or not part.Parent then
+		if not partAlive(part) then
 			return
 		end
 		local pos, onScreen = ctx.camera:WorldToViewportPoint(part.Position)
@@ -107,7 +111,7 @@ function Aim.create(ctx)
 
 	local function targetScoreSilent(t, origin, center, screenFov, angleFov, range)
 		local part = t.aimPart
-		if not part or not part.Parent then
+		if not partAlive(part) then
 			return
 		end
 		local targetPos = combat.getPredictedPos(part)
@@ -173,7 +177,7 @@ function Aim.create(ctx)
 		if not ctx.flags.flagOn("AimEnabled") or not holdRequired() then
 			return
 		end
-		if not state.aimTargetPart or not state.aimTargetPart.Parent then
+		if not state.aimTargetPart or not partAlive(state.aimTargetPart) then
 			return
 		end
 		ctx.camera = workspace.CurrentCamera

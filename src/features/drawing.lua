@@ -114,8 +114,11 @@ function Drawing.create(ctx)
 		hl.Enabled = true
 	end
 
-	local function screenBox(headWorld, feetWorld)
+	local function screenBox(headWorld, feetWorld, rootWorld)
 		local camera = ctx.camera
+		if not camera then
+			return false
+		end
 		local headPos, headOn = camera:WorldToViewportPoint(headWorld)
 		local feetPos, feetOn = camera:WorldToViewportPoint(feetWorld)
 		local refPos
@@ -123,6 +126,17 @@ function Drawing.create(ctx)
 			refPos = headPos
 		elseif feetOn and feetPos.Z > 0 then
 			refPos = feetPos
+		elseif rootWorld then
+			local rootPos, rootOn = camera:WorldToViewportPoint(rootWorld)
+			if rootOn and rootPos.Z > 0 then
+				refPos = rootPos
+				headPos = rootPos
+				feetPos = rootPos
+				headOn = true
+				feetOn = true
+			else
+				return false
+			end
 		else
 			return false
 		end

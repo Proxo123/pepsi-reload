@@ -48,6 +48,8 @@ function Main.start(import)
 			renderWarned = false,
 			aimTargetPart = nil,
 			silentTargetPart = nil,
+			silentTargetHead = nil,
+			silentTargetChar = nil,
 			lockedTargetKey = nil,
 			directionSpreadRestore = nil,
 			fireRecoilRestore = nil,
@@ -74,18 +76,42 @@ function Main.start(import)
 
 	local fovCircle = ctx.draw.drawing("Circle", { Filled = false, Thickness = 1, NumSides = 48, ZIndex = 4 })
 	local logicAccum = 0
-	local espAccum = 0
-	local LOGIC_HZ = 15
-	local ESP_HZ = 15
+	local LOGIC_HZ = 20
 
-	local function needsTargeting()
+	local function needsLogic()
 		return ctx.flags.flagOn("ESPEnabled")
 			or ctx.flags.flagOn("AimEnabled")
 			or ctx.flags.flagOn("SilentAim")
-			or (ctx.flags.flagOn("SilentHandTracer") and ctx.flags.flagOn("SilentAim"))
+			or ctx.flags.flagOn("NoSpread")
+			or ctx.flags.flagOn("NoRecoil")
+	end
+
+	local function needsVisuals()
+		return ctx.flags.flagOn("ESPEnabled")
+			or ctx.flags.flagOn("AimShowFOV")
+			or (ctx.flags.flagOn("SilentAim") and ctx.flags.flagOn("SilentHandTracer"))
 	end
 
 	local function runLogic()
+		local targetList = ctx.targets.collectTargets()
+		ctx.state.cachedTargetList = targetList
+
+		local aimTarget = ctx.aim.getAimTarget(targetList)
+		ctx.state.aimTargetPart = aimTarget and aimTarget.aimPart or nil
+
+		local silentTarget = ctx.aim.getSilentTarget(targetList)
+		ctx.state.silentTargetPart = silentTarget and silentTarget.aimPart or nil
+		ctx.state.silentTargetChar = silentTarget and silentTarget.character or nil
+		if silentTarget then
+			ctx.state.silentTargetHead = silentTarget.character and silentTarget.character:FindFirstChild("Head")
+				or silentTarget.aimPart
+		else
+			ctx.state.silentTargetHead = nil
+			ctx.state.silentTargetChar = nil
+		end
+	end
+
+	local function runVisuals()
 		ctx.camera = workspace.CurrentCamera
 		if not ctx.camera then
 			return
@@ -93,8 +119,6 @@ function Main.start(import)
 		local vp = ctx.camera.ViewportSize
 		local center = Vector2.new(vp.X * 0.5, vp.Y * 0.5)
 		local origin = ctx.camera.CFrame.Position
-		local targetList = ctx.targets.collectTargets()
-		ctx.state.cachedTargetList = targetList
 
 		if fovCircle then
 			local show = ctx.flags.flagOn("AimEnabled") and ctx.flags.flagOn("AimShowFOV") and ctx.aim.holdRequired()
@@ -106,38 +130,27 @@ function Main.start(import)
 			end
 		end
 
-		local aimTarget = ctx.aim.getAimTarget(targetList)
-		ctx.state.aimTargetPart = aimTarget and aimTarget.aimPart or nil
-		local silentTarget = ctx.aim.getSilentTarget(targetList)
-		ctx.state.silentTargetPart = silentTarget and silentTarget.aimPart or nil
-
 		if ctx.flags.flagOn("SilentAim") and ctx.flags.flagOn("SilentHandTracer") then
 			ctx.tracers.updateSilentTracer(center)
 		elseif ctx.tracers then
 			ctx.tracers.updateSilentTracer(nil)
 		end
-	end
 
-	local function runEsp()
-		if not ctx.flags.flagOn("ESPEnabled") then
-			return
-		end
-		ctx.camera = workspace.CurrentCamera
-		if not ctx.camera then
-			return
-		end
-		local vp = ctx.camera.ViewportSize
-		local center = Vector2.new(vp.X * 0.5, vp.Y * 0.5)
-		local origin = ctx.camera.CFrame.Position
-		local targetList = ctx.state.cachedTargetList
-		if #targetList == 0 then
-			targetList = ctx.targets.collectTargets()
-			ctx.state.cachedTargetList = targetList
-		end
-		ctx.state.lastSeenEsp = ctx.esp.update(targetList, origin, center, vp)
-		for key in pairs(ctx.drawings) do
-			if not ctx.state.lastSeenEsp[key] then
-				ctx.draw.clearKey(key)
+		if ctx.flags.flagOn("ESPEnabled") then
+			local targetList = ctx.state.cachedTargetList
+			if #targetList == 0 then
+				targetList = ctx.targets.collectTargets()
+				ctx.state.cachedTargetList = targetList
+			end
+			ctx.state.lastSeenEsp = ctx.esp.update(targetList, origin, center, vp)
+			for key, pack in pairs(ctx.drawings) do
+				if not ctx.state.lastSeenEsp[key] then
+					ctx.draw.hidePack(pack)
+					local hl = ctx.highlights[key]
+					if hl then
+						hl.Enabled = false
+					end
+				end
 			end
 		end
 	end
@@ -145,6 +158,8 @@ function Main.start(import)
 	local function unload()
 		ctx.state.aimTargetPart = nil
 		ctx.state.silentTargetPart = nil
+		ctx.state.silentTargetHead = nil
+		ctx.state.silentTargetChar = nil
 		ctx.state.lockedTargetKey = nil
 		ctx.combat.disableAll()
 		pcall(function()
@@ -206,7 +221,7 @@ function Main.start(import)
 				ctx.combat.syncNoSpreadToggle()
 				ctx.combat.syncNoRecoilToggle()
 				ctx.combat.syncSilentAimToggle()
-				if not needsTargeting() then
+				if not needsLogic() then
 					return
 				end
 				logicAccum += dt
@@ -214,13 +229,27 @@ function Main.start(import)
 					logicAccum = 0
 					runLogic()
 				end
-				if ctx.flags.flagOn("ESPEnabled") then
-					espAccum += dt
-					if espAccum >= (1 / ESP_HZ) then
-						espAccum = 0
-						runEsp()
-					end
+			end)
+			if not ok and not ctx.state.renderWarned then
+				ctx.state.renderWarned = true
+				warn("[Pepsi Reload] " .. tostring(err))
+			end
+		end)
+	)
+	table.insert(
+		ctx.connections,
+		RunService.RenderStepped:Connect(function()
+			local ok, err = pcall(function()
+				if library.IsGuiValid and not library.IsGuiValid() then
+					return
 				end
+				if not needsVisuals() then
+					if fovCircle then
+						ctx.draw.setVisible(fovCircle, false)
+					end
+					return
+				end
+				runVisuals()
 			end)
 			if not ok and not ctx.state.renderWarned then
 				ctx.state.renderWarned = true

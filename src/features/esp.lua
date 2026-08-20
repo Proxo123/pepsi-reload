@@ -25,7 +25,7 @@ function Esp.create(ctx)
 			local pack = draw.getPack(t.key)
 			local color = ctx.targets.getColor(t)
 			if show then
-				local okBox, x, y, w, h, labelPos, feetPos = draw.screenBox(t.headWorld, t.feetWorld)
+				local okBox, x, y, w, h, labelPos, feetPos = draw.screenBox(t.headWorld, t.feetWorld, t.root.Position)
 				local boxVis = ctx.flags.flagOn("ESPBoxes") and okBox == true
 				draw.setVisible(pack.box, boxVis)
 				draw.setVisible(pack.boxOut, boxVis)

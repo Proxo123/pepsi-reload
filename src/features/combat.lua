@@ -102,7 +102,7 @@ function Combat.create(ctx)
 				state.directionSpreadRestore = af.GiveDirectionSpread
 			end
 			af.GiveDirectionSpread = function(dir, ...)
-				if state.silentAimActive and state.silentTargetPart and state.silentTargetPart.Parent then
+				if state.silentAimActive and state.silentTargetPart and state.silentTargetPart.Position then
 					local targetPos = getPredictedPos(state.silentTargetPart)
 					local origin = gameApi.getGunMuzzlePos()
 					if not origin then
