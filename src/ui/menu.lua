@@ -80,7 +80,6 @@ function Menu.create(ctx)
 		Max = 90,
 		Textbox = true,
 	})
-	silentSet:AddSlider({ Name = "Range", Flag = "AimRange", Value = defaults.AimRange, Min = 50, Max = 2500, Textbox = true })
 
 	combatSec:AddToggle({ Name = "No Spread", Flag = "NoSpread", Value = false })
 	combatSec:AddToggle({ Name = "No Recoil", Flag = "NoRecoil", Value = false })

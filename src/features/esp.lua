@@ -29,7 +29,7 @@ function Esp.create(ctx)
 				local boxVis = ctx.flags.flagOn("ESPBoxes") and okBox == true
 				draw.setVisible(pack.box, boxVis)
 				draw.setVisible(pack.boxOut, boxVis)
-				if boxVis then
+				if boxVis and pack.box and pack.boxOut then
 					pack.box.Color = color
 					pack.box.Position = Vector2.new(x, y)
 					pack.box.Size = Vector2.new(w, h)

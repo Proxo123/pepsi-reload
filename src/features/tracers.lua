@@ -4,6 +4,9 @@ function Tracers.create(ctx)
 	local silentLine = ctx.draw.drawing("Line", { Thickness = 2, ZIndex = 5 })
 
 	local function updateSilentHandTracer()
+		if not silentLine then
+			return
+		end
 		local show = ctx.flags.flagOn("SilentAim") and ctx.flags.flagOn("SilentHandTracer")
 		if not show then
 			ctx.draw.setVisible(silentLine, false)
