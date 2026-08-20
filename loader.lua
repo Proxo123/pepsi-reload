@@ -15,7 +15,7 @@ local COMMIT = "1a002b2"
 local REPO = "https://raw.githubusercontent.com/Proxo123/pepsi-reload/" .. COMMIT .. "/"
 
 getgenv().PEPSI_REPO = REPO
-getgenv().PEPSI_CACHE_BUST = "v22b"
+getgenv().PEPSI_CACHE_BUST = "v23"
 
 local ok, err = pcall(function()
 	loadstring(game:HttpGet(REPO .. "src/bootstrap.lua"))()
