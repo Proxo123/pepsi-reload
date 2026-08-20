@@ -36,11 +36,55 @@ function Combat.create(ctx)
 		getgenv()._PepsiFireHooks = nil
 	end
 
+	local function uninstallSilentRayHook()
+		if state.silentRayRestore then
+			workspace.FindPartOnRayWithIgnoreList = state.silentRayRestore
+			state.silentRayRestore = nil
+		end
+		state.inSilentFire = false
+		state.silentRayIndex = 0
+	end
+
+	local function installSilentRayHook()
+		if state.silentRayRestore then
+			return
+		end
+		state.silentRayRestore = workspace.FindPartOnRayWithIgnoreList
+		workspace.FindPartOnRayWithIgnoreList = function(self, ray, ignoreList, ...)
+			if state.inSilentFire and state.silentTargetPart then
+				state.silentRayIndex = (state.silentRayIndex or 0) + 1
+				if state.silentRayIndex == 1 then
+					local part = state.silentTargetPart
+					if part and part.Position then
+						return part, part.Position, Vector3.new(0, 1, 0)
+					end
+				end
+			end
+			return state.silentRayRestore(self, ray, ignoreList, ...)
+		end
+	end
+
 	restoreSpreadHooks()
 	restoreFireHooks()
+	uninstallSilentRayHook()
 
 	local function getPredictedPos(part)
 		return part.Position
+	end
+
+	local function zeroSpreadValues()
+		local pgi = RS:FindFirstChild("PlayerGunInfo") and RS.PlayerGunInfo:FindFirstChild(lp.Name)
+		if not pgi then
+			return
+		end
+		local spread = pgi:FindFirstChild("Spread")
+		local added = pgi:FindFirstChild("Added")
+		if spread then
+			spread.Value = 0
+		end
+		if added then
+			added.Value = 0
+		end
 	end
 
 	local function hookGunFiresOnce()
@@ -56,20 +100,21 @@ function Combat.create(ctx)
 					local original = mod.Fire
 					mod._PepsiFireWrapped = true
 					mod.Fire = function(u14, p15)
-						if state.noSpreadActive then
-							local pgi = RS:FindFirstChild("PlayerGunInfo") and RS.PlayerGunInfo:FindFirstChild(lp.Name)
-							if pgi then
-								local spread = pgi:FindFirstChild("Spread")
-								local added = pgi:FindFirstChild("Added")
-								if spread then
-									spread.Value = 0
-								end
-								if added then
-									added.Value = 0
-								end
-							end
+						local useSilent = state.silentAimActive and state.silentTargetPart and state.silentTargetPart.Position
+						if state.noSpreadActive or useSilent then
+							zeroSpreadValues()
 						end
-						return original(u14, p15)
+						if useSilent then
+							state.inSilentFire = true
+							state.silentRayIndex = 0
+						end
+						local okFire, result = pcall(original, u14, p15)
+						state.inSilentFire = false
+						state.silentRayIndex = 0
+						if not okFire then
+							error(result)
+						end
+						return result
 					end
 					fireHooks[child] = { mod = mod, original = original }
 					table.insert(stored, fireHooks[child])
@@ -166,6 +211,8 @@ function Combat.create(ctx)
 		end
 		state.silentAimActive = true
 		refreshDirectionSpreadHook()
+		installSilentRayHook()
+		hookGunFiresOnce()
 	end
 
 	local function disableSilentAim()
@@ -174,6 +221,7 @@ function Combat.create(ctx)
 		end
 		state.silentAimActive = false
 		state.silentTargetPart = nil
+		uninstallSilentRayHook()
 		if not state.noSpreadActive then
 			unhookGunFires()
 		end
@@ -235,6 +283,7 @@ function Combat.create(ctx)
 		disableNoRecoil()
 		disableSilentAim()
 		unhookGunFires()
+		uninstallSilentRayHook()
 		restoreSpreadHooks()
 		state.noSpreadFlagState = false
 		state.noRecoilFlagState = false
