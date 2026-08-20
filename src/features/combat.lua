@@ -1,0 +1,294 @@
+local Combat = {}
+
+function Combat.create(ctx)
+	local RS = ctx.services.RS
+	local lp = ctx.lp
+	local gameApi = ctx.game
+	local state = ctx.state
+
+	local fireHooks = {}
+	local spreadFnOriginals = {}
+
+	local function getPredictedPos(part)
+		local lead = tonumber(ctx.flags.flagVal("AimPrediction", ctx.config.DEFAULTS.AimPrediction))
+			or ctx.config.DEFAULTS.AimPrediction
+		local vel = Vector3.zero
+		pcall(function()
+			vel = part.AssemblyLinearVelocity
+			if vel.Magnitude < 0.05 then
+				vel = part.Velocity
+			end
+		end)
+		return part.Position + vel * lead
+	end
+
+	local function installSilentRayHook()
+		if state.rayNamecallRestore or not hookmetamethod then
+			return
+		end
+		local old
+		old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+			local method = getnamecallmethod()
+			if state.silentRayState and self == workspace and method == "FindPartOnRayWithIgnoreList" then
+				state.silentRayState.count = (state.silentRayState.count or 0) + 1
+				if state.silentRayState.count == 1 then
+					return state.silentRayState.part, state.silentRayState.pos, state.silentRayState.normal
+				end
+			end
+			return old(self, ...)
+		end))
+		state.rayNamecallRestore = old
+	end
+
+	local function fireWithSilentRay(original, u14, p15)
+		local targetPos = getPredictedPos(state.silentTargetPart)
+		local normal = Vector3.new(0, 1, 0)
+		if u14 and u14.Handle then
+			local muzzle = (u14.Handle.CFrame * CFrame.new(0, 0, 0.5)).Position
+			local diff = targetPos - muzzle
+			if diff.Magnitude > 0.01 then
+				normal = -diff.Unit
+			end
+		end
+		state.silentRayState = {
+			part = state.silentTargetPart,
+			pos = targetPos,
+			normal = normal,
+			count = 0,
+		}
+		local ok, err = pcall(original, u14, p15)
+		state.silentRayState = nil
+		if not ok then
+			error(err)
+		end
+	end
+
+	local function hookGunFiresOnce()
+		local gf = RS.Modules.M3WS_FRAMEWORK.Services.GunService.GunFunctions
+		for _, child in gf:GetChildren() do
+			if child:IsA("ModuleScript") and not fireHooks[child] then
+				local ok, mod = pcall(require, child)
+				if ok and type(mod) == "table" and type(mod.Fire) == "function" then
+					local original = mod.Fire
+					mod.Fire = function(u14, p15)
+						if state.noSpreadActive then
+							local pgi = RS:FindFirstChild("PlayerGunInfo") and RS.PlayerGunInfo:FindFirstChild(lp.Name)
+							if pgi then
+								local spread = pgi:FindFirstChild("Spread")
+								local added = pgi:FindFirstChild("Added")
+								if spread then
+									spread.Value = 0
+								end
+								if added then
+									added.Value = 0
+								end
+							end
+						end
+						if state.silentAimActive and state.silentTargetPart and state.silentTargetPart.Parent then
+							fireWithSilentRay(original, u14, p15)
+							return
+						end
+						return original(u14, p15)
+					end
+					fireHooks[child] = { mod = mod, original = original }
+				end
+			end
+		end
+	end
+
+	local function unhookGunFires()
+		for _, data in fireHooks do
+			if data.mod and data.original then
+				data.mod.Fire = data.original
+			end
+		end
+		table.clear(fireHooks)
+	end
+
+	local function refreshDirectionSpreadHook()
+		local af = gameApi.getAllFunctions()
+		if not af then
+			return
+		end
+		if state.silentAimActive or state.noSpreadActive then
+			if not state.directionSpreadRestore then
+				state.directionSpreadRestore = af.GiveDirectionSpread
+			end
+			af.GiveDirectionSpread = function(dir, ...)
+				if state.silentAimActive and state.silentTargetPart and state.silentTargetPart.Parent then
+					local targetPos = getPredictedPos(state.silentTargetPart)
+					local origin = gameApi.getGunMuzzlePos()
+					if not origin then
+						ctx.camera = workspace.CurrentCamera
+						origin = ctx.camera and ctx.camera.CFrame.Position
+					end
+					if origin then
+						local newDir = targetPos - origin
+						if newDir.Magnitude > 0.01 then
+							return newDir.Unit
+						end
+					end
+				end
+				if state.noSpreadActive then
+					return dir
+				end
+				return state.directionSpreadRestore(dir, ...)
+			end
+		elseif state.directionSpreadRestore then
+			af.GiveDirectionSpread = state.directionSpreadRestore
+			state.directionSpreadRestore = nil
+		end
+	end
+
+	local function hookGiveRandomSpreadOnce()
+		if next(spreadFnOriginals) then
+			return
+		end
+		for _, fn in getgc(true) do
+			if type(fn) == "function" then
+				local ok, name = pcall(debug.info, fn, "n")
+				if ok and name == "GiveRandomSpread" and not spreadFnOriginals[fn] then
+					local original = fn
+					spreadFnOriginals[fn] = original
+					if hookfunction then
+						hookfunction(fn, function(spread, ...)
+							if state.silentAimActive and state.silentTargetPart and state.silentTargetPart.Parent then
+								return 0, 0, 0
+							end
+							if state.noSpreadActive then
+								return 0, 0, 0
+							end
+							return original(spread, ...)
+						end)
+					end
+				end
+			end
+		end
+	end
+
+	local function enableNoSpread()
+		if state.noSpreadActive then
+			return
+		end
+		state.noSpreadActive = true
+		refreshDirectionSpreadHook()
+		hookGunFiresOnce()
+		hookGiveRandomSpreadOnce()
+	end
+
+	local function disableNoSpread()
+		if not state.noSpreadActive then
+			return
+		end
+		state.noSpreadActive = false
+		if not state.silentAimActive then
+			unhookGunFires()
+		end
+		refreshDirectionSpreadHook()
+	end
+
+	local function syncNoSpreadToggle()
+		local want = ctx.flags.flagOn("NoSpread")
+		if want == state.noSpreadFlagState then
+			return
+		end
+		state.noSpreadFlagState = want
+		if want then
+			enableNoSpread()
+		else
+			disableNoSpread()
+		end
+	end
+
+	local function enableSilentAim()
+		if state.silentAimActive then
+			return
+		end
+		state.silentAimActive = true
+		installSilentRayHook()
+		hookGiveRandomSpreadOnce()
+		refreshDirectionSpreadHook()
+		hookGunFiresOnce()
+	end
+
+	local function disableSilentAim()
+		if not state.silentAimActive then
+			return
+		end
+		state.silentAimActive = false
+		state.silentTargetPart = nil
+		if not state.noSpreadActive then
+			unhookGunFires()
+		end
+		refreshDirectionSpreadHook()
+	end
+
+	local function syncSilentAimToggle()
+		local want = ctx.flags.flagOn("SilentAim")
+		if want == state.silentAimFlagState then
+			return
+		end
+		state.silentAimFlagState = want
+		if want then
+			enableSilentAim()
+		else
+			disableSilentAim()
+		end
+	end
+
+	local function enableNoRecoil()
+		if state.noRecoilActive then
+			return
+		end
+		local GS = gameApi.getGunService()
+		if GS and type(GS.FireRecoil) == "function" and not state.fireRecoilRestore then
+			state.fireRecoilRestore = GS.FireRecoil
+			GS.FireRecoil = function() end
+			state.noRecoilActive = true
+		end
+	end
+
+	local function disableNoRecoil()
+		if not state.fireRecoilRestore then
+			return
+		end
+		local GS = gameApi.getGunService()
+		if GS then
+			GS.FireRecoil = state.fireRecoilRestore
+		end
+		state.fireRecoilRestore = nil
+		state.noRecoilActive = false
+	end
+
+	local function syncNoRecoilToggle()
+		local want = ctx.flags.flagOn("NoRecoil")
+		if want == state.noRecoilFlagState then
+			return
+		end
+		state.noRecoilFlagState = want
+		if want then
+			enableNoRecoil()
+		else
+			disableNoRecoil()
+		end
+	end
+
+	local function disableAll()
+		disableNoSpread()
+		disableNoRecoil()
+		disableSilentAim()
+		state.noSpreadFlagState = false
+		state.noRecoilFlagState = false
+		state.silentAimFlagState = false
+	end
+
+	return {
+		getPredictedPos = getPredictedPos,
+		syncNoSpreadToggle = syncNoSpreadToggle,
+		syncSilentAimToggle = syncSilentAimToggle,
+		syncNoRecoilToggle = syncNoRecoilToggle,
+		disableAll = disableAll,
+	}
+end
+
+return Combat
