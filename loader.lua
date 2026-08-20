@@ -1,9 +1,9 @@
 --[[
-  Pepsi Reload — GitHub loader (paste into your executor)
+  Pepsi Reload — paste into your executor:
 
-  1. Push this repo to GitHub
-  2. Set REPO below to your raw.githubusercontent.com URL
-  3. Execute this script (or save as auto-exec)
+  loadstring(game:HttpGet("https://raw.githubusercontent.com/Proxo123/pepsi-reload/2381bbe/loader.lua"))()
+
+  Pin changes each release so Roblox HttpGet does not serve a stale loader cache.
 ]]
 
 if getgenv()._PepsiReloadUnload then
