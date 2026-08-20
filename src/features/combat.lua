@@ -7,7 +7,6 @@ function Combat.create(ctx)
 	local state = ctx.state
 
 	local fireHooks = {}
-	local spreadFnOriginals = {}
 
 	local function restoreSpreadHooks()
 		local stored = getgenv()._PepsiSpreadOriginals
@@ -31,6 +30,7 @@ function Combat.create(ctx)
 		for _, data in stored do
 			if data.mod and data.original then
 				data.mod.Fire = data.original
+				data.mod._PepsiFireWrapped = nil
 			end
 		end
 		getgenv()._PepsiFireHooks = nil
@@ -181,50 +181,6 @@ function Combat.create(ctx)
 		end
 	end
 
-	local function unhookGiveRandomSpread()
-		local stored = getgenv()._PepsiSpreadOriginals or spreadFnOriginals
-		if hookfunction and stored then
-			for fn, orig in stored do
-				pcall(function()
-					hookfunction(fn, orig)
-				end)
-			end
-		end
-		table.clear(spreadFnOriginals)
-		getgenv()._PepsiSpreadOriginals = nil
-		getgenv()._PepsiSpreadHooked = nil
-	end
-
-	local function hookGiveRandomSpreadOnce()
-		if getgenv()._PepsiSpreadHooked or next(spreadFnOriginals) then
-			return
-		end
-		for _, fn in getgc(true) do
-			if type(fn) == "function" then
-				local ok, name = pcall(debug.info, fn, "n")
-				if ok and name == "GiveRandomSpread" and not spreadFnOriginals[fn] then
-					local original = fn
-					spreadFnOriginals[fn] = original
-					if hookfunction then
-						hookfunction(fn, function(spread, ...)
-							if state.silentAimActive and state.silentTargetPart and state.silentTargetPart.Parent then
-								return 0, 0, 0
-							end
-							if state.noSpreadActive then
-								return 0, 0, 0
-							end
-							return original(spread, ...)
-						end)
-					end
-				end
-			end
-		end
-		if next(spreadFnOriginals) then
-			getgenv()._PepsiSpreadOriginals = spreadFnOriginals
-			getgenv()._PepsiSpreadHooked = true
-		end
-	end
-
 	local function enableNoSpread()
 		if state.noSpreadActive then
 			return
@@ -232,7 +188,6 @@ function Combat.create(ctx)
 		state.noSpreadActive = true
 		refreshDirectionSpreadHook()
 		hookGunFiresOnce()
-		hookGiveRandomSpreadOnce()
 	end
 
 	local function disableNoSpread()
@@ -242,7 +197,6 @@ function Combat.create(ctx)
 		state.noSpreadActive = false
 		if not state.silentAimActive then
 			unhookGunFires()
-			unhookGiveRandomSpread()
 		end
 		refreshDirectionSpreadHook()
 	end
@@ -266,7 +220,6 @@ function Combat.create(ctx)
 		end
 		state.silentAimActive = true
 		installSilentRayHook()
-		hookGiveRandomSpreadOnce()
 		refreshDirectionSpreadHook()
 		hookGunFiresOnce()
 	end
@@ -279,7 +232,6 @@ function Combat.create(ctx)
 		state.silentTargetPart = nil
 		if not state.noSpreadActive then
 			unhookGunFires()
-			unhookGiveRandomSpread()
 		end
 		refreshDirectionSpreadHook()
 	end
@@ -338,8 +290,8 @@ function Combat.create(ctx)
 		disableNoSpread()
 		disableNoRecoil()
 		disableSilentAim()
-		unhookGiveRandomSpread()
 		unhookGunFires()
+		restoreSpreadHooks()
 		if state.rayNamecallRestore and hookmetamethod then
 			pcall(function()
 				hookmetamethod(game, "__namecall", state.rayNamecallRestore)
