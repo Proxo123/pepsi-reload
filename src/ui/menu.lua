@@ -62,7 +62,7 @@ function Menu.create(ctx)
 	aimSet:AddSlider({ Name = "Range", Flag = "AimRange", Value = defaults.AimRange, Min = 50, Max = 2500, Textbox = true })
 
 	silentMain:AddToggle({ Name = "Enabled", Flag = "SilentAim", Value = false })
-	silentMain:AddToggle({ Name = "Hand Tracer", Flag = "SilentHandTracer", Value = false })
+	silentMain:AddToggle({ Name = "Target Tracer", Flag = "SilentHandTracer", Value = false })
 
 	silentSet:AddSlider({
 		Name = "Silent FOV",

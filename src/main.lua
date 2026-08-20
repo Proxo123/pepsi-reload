@@ -156,18 +156,18 @@ function Main.start(import)
 		local silentTarget = ctx.aim.getSilentTarget(targetList)
 		ctx.state.silentTargetPart = silentTarget and silentTarget.aimPart or nil
 
+		if ctx.flags.flagOn("SilentAim") and ctx.flags.flagOn("SilentHandTracer") then
+			ctx.tracers.updateSilentTracer(center)
+		end
+
 		local seen = {}
 		local needVis = ctx.flags.flagOn("ESPEnabled")
-			or (ctx.flags.flagOn("SilentAim") and ctx.flags.flagOn("SilentHandTracer"))
 		if needVis then
 			visAccum += dt or (1 / 60)
 			if visAccum >= VIS_INTERVAL then
 				visAccum = 0
 				if ctx.flags.flagOn("ESPEnabled") then
 					seen = ctx.esp.update(targetList, origin, center, vp)
-				end
-				if ctx.flags.flagOn("SilentAim") and ctx.flags.flagOn("SilentHandTracer") then
-					ctx.tracers.updateSilentHandTracer()
 				end
 			elseif ctx.flags.flagOn("ESPEnabled") then
 				for _, t in ipairs(targetList) do
