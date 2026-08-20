@@ -80,6 +80,7 @@ function Menu.create(ctx)
 
 	pickupSec:AddToggle({ Name = "Instant Pickup (Ammo)", Flag = "InstantPickup", Value = false })
 	pickupSec:AddToggle({ Name = "Far Pickup (Ammo)", Flag = "FarPickup", Value = false })
+	pickupSec:AddToggle({ Name = "Pickup Guns / Loot", Flag = "PickupGuns", Value = false })
 	pickupSec:AddSlider({
 		Name = "Pickup Range",
 		Flag = "PickupRange",
