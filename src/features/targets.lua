@@ -22,13 +22,19 @@ function Targets.create(ctx)
 		return root
 	end
 
-	local function getLogicalParts(char, isBot)
+	local function getLogicalParts(char, isBot, plr)
 		if not char then
 			return
+		end
+		if not isBot and plr then
+			char = gameApi.pickBestModel(plr, char) or char
 		end
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char.PrimaryPart
 		if not hum or hum.Health <= 0 or not root then
+			return
+		end
+		if not isBot and gameApi.isLobbyPosition(root.Position) then
 			return
 		end
 		local head = char:FindFirstChild("Head")
@@ -39,13 +45,36 @@ function Targets.create(ctx)
 		end
 		local headWorld = split and (root.Position + Vector3.new(0, 2.8, 0)) or head.Position
 		local feetWorld = root.Position - Vector3.new(0, 3.2, 0)
-		return hum, root, getAimPart(char, root, head, isBot), headWorld, feetWorld
+		return hum, root, getAimPart(char, root, head, isBot), headWorld, feetWorld, char
+	end
+
+	local function addPlayerTarget(list, seenPlayers, plr, char)
+		if not plr or plr == lp or seenPlayers[plr.UserId] or gameApi.isPlayerDead(plr) then
+			return
+		end
+		local hum, root, aimPart, headWorld, feetWorld, bestChar = getLogicalParts(char, false, plr)
+		if not hum then
+			return
+		end
+		seenPlayers[plr.UserId] = true
+		table.insert(list, {
+			key = "p" .. plr.UserId,
+			player = plr,
+			character = bestChar or char,
+			hum = hum,
+			root = root,
+			aimPart = aimPart,
+			headWorld = headWorld,
+			feetWorld = feetWorld,
+			name = plr.Name,
+			isBot = false,
+		})
 	end
 
 	local function rayIgnore()
 		local camera = ctx.camera
 		local t = { lp.Character, camera }
-		local wsMe = workspace:FindFirstChild(lp.Name)
+		local wsMe = gameApi.findWorkspacePlayerModel(lp.Name)
 		if wsMe then
 			table.insert(t, wsMe)
 		end
@@ -65,7 +94,8 @@ function Targets.create(ctx)
 		if not result then
 			return true
 		end
-		return result.Instance and char and result.Instance:IsDescendantOf(char)
+		local adornee = char and (gameApi.getHighlightAdornee(char) or char) or char
+		return result.Instance and adornee and result.Instance:IsDescendantOf(adornee)
 	end
 
 	local function getColor(target)
@@ -84,48 +114,19 @@ function Targets.create(ctx)
 			return list
 		end
 		local seenPlayers = {}
-		if ctx.flags.flagOn("ShowPlayers") or ctx.flags.flagOn("AimEnabled") or ctx.flags.flagOn("SilentAim") then
-			for _, plr in Players:GetPlayers() do
-				if plr ~= lp and not gameApi.isPlayerDead(plr) then
-					local char = gameApi.resolvePlayerModel(plr)
-					local hum, root, aimPart, headWorld, feetWorld = getLogicalParts(char, false)
-					if hum then
-						seenPlayers[plr] = true
-						table.insert(list, {
-							key = "p" .. plr.UserId,
-							player = plr,
-							character = char,
-							hum = hum,
-							root = root,
-							aimPart = aimPart,
-							headWorld = headWorld,
-							feetWorld = feetWorld,
-							name = plr.Name,
-							isBot = false,
-						})
+		local wantPlayers = ctx.flags.flagOn("ShowPlayers") or ctx.flags.flagOn("AimEnabled") or ctx.flags.flagOn("SilentAim")
+		if wantPlayers then
+			for _, model in workspace:GetChildren() do
+				if model:IsA("Model") then
+					local plr = Players:FindFirstChild(model.Name)
+					if plr then
+						addPlayerTarget(list, seenPlayers, plr, model)
 					end
 				end
 			end
-			for _, model in workspace:GetChildren() do
-				if model:IsA("Model") and not seenPlayers[model.Name] then
-					local plr = Players:FindFirstChild(model.Name)
-					if plr and plr ~= lp and not gameApi.isPlayerDead(plr) then
-						local hum, root, aimPart, headWorld, feetWorld = getLogicalParts(model, false)
-						if hum then
-							table.insert(list, {
-								key = "p" .. plr.UserId,
-								player = plr,
-								character = model,
-								hum = hum,
-								root = root,
-								aimPart = aimPart,
-								headWorld = headWorld,
-								feetWorld = feetWorld,
-								name = plr.Name,
-								isBot = false,
-							})
-						end
-					end
+			for _, plr in Players:GetPlayers() do
+				if not seenPlayers[plr.UserId] then
+					addPlayerTarget(list, seenPlayers, plr, gameApi.resolvePlayerModel(plr))
 				end
 			end
 		end
@@ -134,11 +135,11 @@ function Targets.create(ctx)
 			if bots then
 				for _, model in bots:GetChildren() do
 					if model:IsA("Model") then
-						local hum, root, aimPart, headWorld, feetWorld = getLogicalParts(model, true)
+						local hum, root, aimPart, headWorld, feetWorld, bestChar = getLogicalParts(model, true)
 						if hum then
 							table.insert(list, {
 								key = "b" .. model.Name,
-								character = model,
+								character = bestChar or model,
 								hum = hum,
 								root = root,
 								aimPart = aimPart,

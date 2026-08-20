@@ -9,6 +9,7 @@ function Main.start(import)
 	local CombatMod = import("src/features/combat")
 	local AimMod = import("src/features/aim")
 	local EspMod = import("src/features/esp")
+	local TracersMod = import("src/features/tracers")
 	local MenuMod = import("src/ui/menu")
 
 	local Players = game:GetService("Players")
@@ -18,7 +19,7 @@ function Main.start(import)
 	local CoreGui = game:GetService("CoreGui")
 	local lp = Players.LocalPlayer
 
-	for _, step in { "PepsiReloadAim", "PepsiReloadAim_v12", "PepsiReloadAim_v13", Config.AIM_STEP } do
+	for _, step in { "PepsiReloadAim", "PepsiReloadAim_v12", "PepsiReloadAim_v13", "PepsiReloadAim_v14", Config.AIM_STEP } do
 		pcall(function()
 			RunService:UnbindFromRenderStep(step)
 		end)
@@ -68,6 +69,7 @@ function Main.start(import)
 	ctx.combat = CombatMod.create(ctx)
 	ctx.aim = AimMod.create(ctx)
 	ctx.esp = EspMod.create(ctx)
+	ctx.tracers = TracersMod.create(ctx)
 	MenuMod.create(ctx)
 
 	local fovCircle = ctx.draw.drawing("Circle", { Filled = false, Thickness = 1, NumSides = 48, ZIndex = 4 })
@@ -93,6 +95,9 @@ function Main.start(import)
 			ctx.draw.clearKey(k)
 		end
 		ctx.draw.destroyDrawing(fovCircle)
+		if ctx.tracers then
+			ctx.tracers.destroy()
+		end
 		pcall(function()
 			library.unload()
 		end)
@@ -149,6 +154,7 @@ function Main.start(import)
 		local silentTarget = ctx.aim.getSilentTarget(targetList)
 		ctx.state.silentTargetPart = silentTarget and silentTarget.aimPart or nil
 		local seen = ctx.esp.update(targetList, origin, center, vp)
+		ctx.tracers.updateSilentHandTracer()
 		for key in pairs(ctx.drawings) do
 			if not seen[key] then
 				ctx.draw.clearKey(key)

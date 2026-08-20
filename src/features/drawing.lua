@@ -90,7 +90,8 @@ function Drawing.create(ctx)
 	end
 
 	local function ensureHighlight(key, char, color)
-		if not ctx.game.isWorkspaceModel(char) then
+		local adornee = ctx.game.getHighlightAdornee(char)
+		if not adornee or not adornee:IsDescendantOf(workspace) then
 			local hl = ctx.highlights[key]
 			if hl then
 				hl.Enabled = false
@@ -107,7 +108,7 @@ function Drawing.create(ctx)
 			hl.Parent = guiParent()
 			ctx.highlights[key] = hl
 		end
-		hl.Adornee = char
+		hl.Adornee = adornee
 		hl.FillColor = color
 		hl.OutlineColor = color
 		hl.Enabled = true

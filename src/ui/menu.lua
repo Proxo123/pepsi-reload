@@ -6,29 +6,39 @@ function Menu.create(ctx)
 
 	local window = ctx.library:CreateWindow({
 		Name = "Pepsi Reload",
-		Themeable = { Info = "Reload BR " .. version, Credit = true },
+		Themeable = { Info = "Reload " .. version, Credit = true },
 	})
-	local aimTab = window:CreateTab({ Name = "Aimbot" })
-	local visTab = window:CreateTab({ Name = "Visuals" })
-	local aimSec = aimTab:CreateSection({ Name = "Aimbot", Side = "Left" })
-	local aimSet = aimTab:CreateSection({ Name = "Settings", Side = "Right" })
-	local espSec = visTab:CreateSection({ Name = "ESP", Side = "Left" })
-	local colSec = visTab:CreateSection({ Name = "Colors", Side = "Right" })
 
-	aimSec:AddToggle({ Name = "Enabled", Flag = "AimEnabled", Value = true })
-	aimSec:AddToggle({ Name = "No Spread", Flag = "NoSpread", Value = false })
-	aimSec:AddToggle({ Name = "No Recoil", Flag = "NoRecoil", Value = false })
-	aimSec:AddToggle({ Name = "Silent Aim", Flag = "SilentAim", Value = false })
-	aimSec:AddToggle({ Name = "Squad Check", Flag = "SquadCheck", Value = true })
-	aimSec:AddToggle({ Name = "Wall Check", Flag = "AimWallCheck", Value = true })
-	aimSec:AddToggle({ Name = "Show FOV", Flag = "AimShowFOV", Value = true })
-	aimSec:AddDropdown({
+	local aimTab = window:CreateTab({ Name = "Aimbot" })
+	local silentTab = window:CreateTab({ Name = "Silent" })
+	local combatTab = window:CreateTab({ Name = "Combat" })
+	local espTab = window:CreateTab({ Name = "ESP" })
+	local colorTab = window:CreateTab({ Name = "Colors" })
+
+	local aimMain = aimTab:CreateSection({ Name = "Aimbot", Side = "Left" })
+	local aimSet = aimTab:CreateSection({ Name = "Settings", Side = "Right" })
+
+	local silentMain = silentTab:CreateSection({ Name = "Silent Aim", Side = "Left" })
+	local silentSet = silentTab:CreateSection({ Name = "Settings", Side = "Right" })
+
+	local combatSec = combatTab:CreateSection({ Name = "Gun Mods", Side = "Left" })
+
+	local espMain = espTab:CreateSection({ Name = "ESP", Side = "Left" })
+	local espSet = espTab:CreateSection({ Name = "Settings", Side = "Right" })
+
+	local colSec = colorTab:CreateSection({ Name = "Colors", Side = "Left" })
+
+	aimMain:AddToggle({ Name = "Enabled", Flag = "AimEnabled", Value = true })
+	aimMain:AddToggle({ Name = "Squad Check", Flag = "SquadCheck", Value = true })
+	aimMain:AddToggle({ Name = "Wall Check", Flag = "AimWallCheck", Value = true })
+	aimMain:AddToggle({ Name = "Show FOV", Flag = "AimShowFOV", Value = true })
+	aimMain:AddDropdown({
 		Name = "Activation",
 		Flag = "AimMode",
 		Value = "Mouse2 Held",
 		List = { "Mouse2 Held", "Mouse1 Held", "Always" },
 	})
-	aimSec:AddDropdown({ Name = "Target Part", Flag = "AimPart", Value = "Head", List = { "Head", "Torso" } })
+	aimMain:AddDropdown({ Name = "Target Part", Flag = "AimPart", Value = "Head", List = { "Head", "Torso" } })
 
 	aimSet:AddSlider({
 		Name = "Lock Strength",
@@ -49,7 +59,12 @@ function Menu.create(ctx)
 		Textbox = true,
 	})
 	aimSet:AddSlider({ Name = "FOV", Flag = "AimFOV", Value = defaults.AimFOV, Min = 10, Max = 500, Textbox = true })
-	aimSet:AddSlider({
+	aimSet:AddSlider({ Name = "Range", Flag = "AimRange", Value = defaults.AimRange, Min = 50, Max = 2500, Textbox = true })
+
+	silentMain:AddToggle({ Name = "Enabled", Flag = "SilentAim", Value = false })
+	silentMain:AddToggle({ Name = "Hand Tracer", Flag = "SilentHandTracer", Value = false })
+
+	silentSet:AddSlider({
 		Name = "Silent FOV",
 		Flag = "SilentFOV",
 		Value = defaults.SilentFOV,
@@ -57,7 +72,7 @@ function Menu.create(ctx)
 		Max = 1200,
 		Textbox = true,
 	})
-	aimSet:AddSlider({
+	silentSet:AddSlider({
 		Name = "Silent Angle",
 		Flag = "SilentAngleFOV",
 		Value = defaults.SilentAngleFOV,
@@ -65,23 +80,27 @@ function Menu.create(ctx)
 		Max = 90,
 		Textbox = true,
 	})
-	aimSet:AddSlider({ Name = "Range", Flag = "AimRange", Value = defaults.AimRange, Min = 50, Max = 2500, Textbox = true })
+	silentSet:AddSlider({ Name = "Range", Flag = "AimRange", Value = defaults.AimRange, Min = 50, Max = 2500, Textbox = true })
 
-	espSec:AddToggle({
+	combatSec:AddToggle({ Name = "No Spread", Flag = "NoSpread", Value = false })
+	combatSec:AddToggle({ Name = "No Recoil", Flag = "NoRecoil", Value = false })
+
+	espMain:AddToggle({
 		Name = "Enabled",
 		Flag = "ESPEnabled",
 		Value = true,
 		Keybind = { Value = Enum.KeyCode.U, Mode = "Toggle" },
 	})
-	espSec:AddToggle({ Name = "Players", Flag = "ShowPlayers", Value = true })
-	espSec:AddToggle({ Name = "Bots", Flag = "ShowBots", Value = true })
-	espSec:AddToggle({ Name = "Boxes", Flag = "ESPBoxes", Value = true })
-	espSec:AddToggle({ Name = "Names", Flag = "ESPNames", Value = true })
-	espSec:AddToggle({ Name = "Distance", Flag = "ESPDistance", Value = true })
-	espSec:AddToggle({ Name = "Health", Flag = "ESPHealth", Value = true })
-	espSec:AddToggle({ Name = "Tracers", Flag = "ESPTracers", Value = false })
-	espSec:AddToggle({ Name = "Chams", Flag = "ESPChams", Value = true })
-	espSec:AddSlider({
+	espMain:AddToggle({ Name = "Players", Flag = "ShowPlayers", Value = true })
+	espMain:AddToggle({ Name = "Bots", Flag = "ShowBots", Value = true })
+	espMain:AddToggle({ Name = "Boxes", Flag = "ESPBoxes", Value = true })
+	espMain:AddToggle({ Name = "Names", Flag = "ESPNames", Value = true })
+	espMain:AddToggle({ Name = "Distance", Flag = "ESPDistance", Value = true })
+	espMain:AddToggle({ Name = "Health", Flag = "ESPHealth", Value = true })
+	espMain:AddToggle({ Name = "Tracers", Flag = "ESPTracers", Value = false })
+	espMain:AddToggle({ Name = "Chams", Flag = "ESPChams", Value = true })
+
+	espSet:AddSlider({
 		Name = "Max Distance",
 		Flag = "ESPMaxDistance",
 		Value = defaults.ESPMaxDistance,
@@ -92,8 +111,9 @@ function Menu.create(ctx)
 
 	colSec:AddColorpicker({ Name = "Players", Flag = "PlayerColor", Value = Color3.fromRGB(255, 70, 70) })
 	colSec:AddColorpicker({ Name = "Bots", Flag = "BotColor", Value = Color3.fromRGB(255, 170, 50) })
-	colSec:AddColorpicker({ Name = "Squad", Flag = "SquadColor", Value = Color3.fromRGB(80, 220, 120) })
+	colSec:AddColorpicker({ Name = "Squad / Team", Flag = "SquadColor", Value = Color3.fromRGB(80, 220, 120) })
 	colSec:AddColorpicker({ Name = "FOV Circle", Flag = "AimFOVColor", Value = Color3.fromRGB(255, 255, 255) })
+	colSec:AddColorpicker({ Name = "Silent Tracer", Flag = "SilentTracerColor", Value = Color3.fromRGB(255, 80, 255) })
 
 	pcall(function()
 		window:CreateDesigner({ Credit = true, Info = "Reload " .. version })
