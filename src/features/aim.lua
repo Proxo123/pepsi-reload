@@ -114,11 +114,7 @@ function Aim.create(ctx)
 		if not partAlive(part) then
 			return
 		end
-		local targetPos = combat.getPredictedPos(part, {
-			character = t.character,
-			backtrackKey = t.key,
-			useBacktrack = false,
-		})
+		local targetPos = combat.getPredictedPos(part)
 		local worldDist = (targetPos - origin).Magnitude
 		if worldDist > range then
 			return
@@ -157,7 +153,7 @@ function Aim.create(ctx)
 		local angleFov = tonumber(ctx.flags.flagVal("SilentAngleFOV", ctx.config.DEFAULTS.SilentAngleFOV))
 			or ctx.config.DEFAULTS.SilentAngleFOV
 		local center = ctx.camera.ViewportSize * 0.5
-		local wallCheck = ctx.flags.flagOn("AimWallCheck") and not ctx.flags.flagOn("Wallbang")
+		local wallbang = ctx.flags.flagOn("Wallbang")
 		local best, bestDist
 		for _, t in ipairs(targetList) do
 			if targetsApi.isValidAimTarget(t) then
@@ -168,26 +164,18 @@ function Aim.create(ctx)
 				end
 			end
 		end
-		if best and wallCheck then
-			local targetPos = combat.getPredictedPos(best.aimPart, {
-				character = best.character,
-				backtrackKey = best.key,
-				useBacktrack = false,
-			})
-			if not targetsApi.visible(origin, targetPos, best.character, best.key) then
-				return
+		if best then
+			local wallCheck = ctx.flags.flagOn("AimWallCheck")
+			if wallbang and best.isBot then
+				wallCheck = false
+			elseif wallbang and not best.isBot then
+				wallCheck = true
 			end
-			combat.recordWallbangVisible(best.key, targetPos)
-		elseif best and ctx.flags.flagOn("Wallbang") then
-			local targetPos = combat.getPredictedPos(best.aimPart, {
-				character = best.character,
-				backtrackKey = best.key,
-				useBacktrack = false,
-			})
-			if targetsApi.visible(origin, targetPos, best.character, best.key) then
-				combat.recordWallbangVisible(best.key, targetPos)
-			elseif not combat.hasWallbangBacktrack(best.key) then
-				return
+			if wallCheck then
+				local targetPos = combat.getPredictedPos(best.aimPart)
+				if not targetsApi.visible(origin, targetPos, best.character, best.key) then
+					return
+				end
 			end
 		end
 		return best
