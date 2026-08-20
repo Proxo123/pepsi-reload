@@ -1,8 +1,8 @@
 -- Update REPO after pushing to GitHub (raw.githubusercontent.com user/repo/branch/)
 return {
-	VERSION = "v32-modular",
+	VERSION = "v33-modular",
 	REPO = "https://raw.githubusercontent.com/Proxo123/pepsi-reload/main/",
-	AIM_STEP = "PepsiReloadAim_v32",
+	AIM_STEP = "PepsiReloadAim_v33",
 	LIBRARY_ID = "rbxassetid://7657867786",
 	DEFAULTS = {
 		AimSmoothness = 1,
@@ -12,6 +12,5 @@ return {
 		AimRange = 1800,
 		ESPMaxDistance = 2000,
 		PickupRange = 400,
-		FireRateBoost = 2,
 	},
 }

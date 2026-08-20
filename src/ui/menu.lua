@@ -77,16 +77,6 @@ function Menu.create(ctx)
 	combatSec:AddToggle({ Name = "No Spread", Flag = "NoSpread", Value = false })
 	combatSec:AddToggle({ Name = "No Recoil", Flag = "NoRecoil", Value = false })
 	combatSec:AddToggle({ Name = "Instant Reload", Flag = "InstantReload", Value = false })
-	combatSec:AddToggle({ Name = "Rapid Fire", Flag = "RapidFire", Value = false })
-	combatSec:AddSlider({
-		Name = "Fire Rate Boost",
-		Flag = "FireRateBoost",
-		Value = defaults.FireRateBoost,
-		Min = 1,
-		Max = 5,
-		Precise = 1,
-		Textbox = true,
-	})
 
 	pickupSec:AddToggle({ Name = "Instant Pickup (Ammo)", Flag = "InstantPickup", Value = false })
 	pickupSec:AddToggle({ Name = "Far Pickup (Ammo)", Flag = "FarPickup", Value = false })

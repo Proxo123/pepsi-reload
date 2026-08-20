@@ -228,7 +228,6 @@ function Main.start(import)
 				ctx.combat.syncNoSpreadToggle()
 				ctx.combat.syncNoRecoilToggle()
 				ctx.combat.syncInstantReloadToggle()
-				ctx.combat.syncRapidFireToggle()
 				ctx.combat.syncSilentAimToggle()
 				if ctx.loot then
 					ctx.loot.tick(dt)
