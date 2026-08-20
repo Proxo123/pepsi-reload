@@ -152,67 +152,6 @@ function Loot.create(ctx)
 		return model.Name:find("Ammo", 1, true) ~= nil
 	end
 
-	local function isWoodModel(model)
-		return model:IsA("Model") and model.Name == "Wood"
-	end
-
-	local function isItemModel(model)
-		if not model:IsA("Model") then
-			return false
-		end
-		if isAmmoModel(model) or isWoodModel(model) then
-			return false
-		end
-		return getLootId(model) ~= nil
-	end
-
-	local function isWoodFull()
-		local inv = RS:FindFirstChild("PlayersInventory") and RS.PlayersInventory:FindFirstChild(lp.Name)
-		local cap = RS:FindFirstChild("GameInfo") and RS.GameInfo:FindFirstChild("WoodCap")
-		if not inv or not cap then
-			return false
-		end
-		local wood = inv:FindFirstChild("Wood")
-		return wood and wood.Value >= cap.Value
-	end
-
-	local function isInventoryFull()
-		local inv = RS:FindFirstChild("PlayersInventory") and RS.PlayersInventory:FindFirstChild(lp.Name)
-		if not inv then
-			return false
-		end
-		local count = 0
-		for _, child in inv:GetChildren() do
-			if child:IsA("ObjectValue") and child.Value then
-				count += 1
-			end
-		end
-		return count >= 6
-	end
-
-	local function canPickupModel(model)
-		if isAmmoModel(model) then
-			return not isClipFull(model.Name)
-		end
-		if isWoodModel(model) then
-			return not isWoodFull()
-		end
-		if isItemModel(model) then
-			return not isInventoryFull()
-		end
-		return false
-	end
-
-	local function shouldScanModel(model)
-		if isAmmoModel(model) then
-			return ctx.flags.flagOn("InstantPickup") or ctx.flags.flagOn("FarPickup")
-		end
-		if isItemModel(model) or isWoodModel(model) then
-			return ctx.flags.flagOn("PickupGuns")
-		end
-		return false
-	end
-
 	local function getPlayerRoot()
 		local char = lp.Character
 		if not char then
@@ -273,15 +212,11 @@ function Loot.create(ctx)
 	local function getMaxRangeSq()
 		local instant = ctx.flags.flagOn("InstantPickup")
 		local far = ctx.flags.flagOn("FarPickup")
-		local guns = ctx.flags.flagOn("PickupGuns")
-		if not instant and not far and not guns then
+		if not instant and not far then
 			return 0
 		end
-		local range = 0
-		if instant or guns then
-			range = math.max(range, INSTANT_RANGE)
-		end
-		if far or guns then
+		local range = instant and INSTANT_RANGE or 0
+		if far then
 			local farRange = tonumber(ctx.flags.flagVal("PickupRange", ctx.config.DEFAULTS.PickupRange))
 				or ctx.config.DEFAULTS.PickupRange
 			range = math.max(range, farRange)
@@ -314,7 +249,7 @@ function Loot.create(ctx)
 		local closestDistSq = maxRangeSq + 1
 
 		for _, child in folder:GetChildren() do
-			if shouldScanModel(child) and canPickupModel(child) then
+			if isAmmoModel(child) and not isClipFull(child.Name) then
 				local pos = getModelPosition(child)
 				local id = getLootId(child)
 				if pos and id and not pickedCooldown[id] then
@@ -347,9 +282,7 @@ function Loot.create(ctx)
 	end
 
 	local function tickPickup(dt)
-		local want = ctx.flags.flagOn("InstantPickup")
-			or ctx.flags.flagOn("FarPickup")
-			or ctx.flags.flagOn("PickupGuns")
+		local want = ctx.flags.flagOn("InstantPickup") or ctx.flags.flagOn("FarPickup")
 		setActive(want)
 		if not want then
 			return

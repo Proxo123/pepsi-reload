@@ -89,7 +89,6 @@ function Main.start(import)
 			or ctx.flags.flagOn("InstantReload")
 			or ctx.flags.flagOn("InstantPickup")
 			or ctx.flags.flagOn("FarPickup")
-			or ctx.flags.flagOn("PickupGuns")
 	end
 
 	local function needsVisuals()
