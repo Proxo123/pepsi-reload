@@ -2,44 +2,23 @@ local Loot = {}
 
 local PICKUP_HZ = 4
 local PICKUP_COOLDOWN = 0.6
-local MAX_PICKUPS_PER_TICK = 1
-local INSTANT_RANGE = 14
-local PICKUP_ALL_BATCH = 35
-local PICKUP_ALL_DELAY = 0.04
-
-local LOOT_AMMO_SHORT = {
-	Light = "Light Ammo",
-	Medium = "Medium Ammo",
-	Heavy = "Heavy Ammo",
-	Rocket = "Rocket Ammo",
-	Shells = "Shells",
-	Arrow = "Arrow",
-}
+local GAME_PICKUP_RANGE = 14
+local API_RETRY = 5
+local PICKUP_ALL_BATCH = 12
+local PICKUP_ALL_DELAY = 0.08
 
 function Loot.create(ctx)
 	local lp = ctx.lp
 	local RS = ctx.services.RS
 
-	local remoteHandler
 	local ammoCaps
 	local pickedCooldown = {}
 	local pickupAccum = 0
 	local active = false
-	local lootFolder
 	local pickupAllRunning = false
-
-	local function getRemoteHandler()
-		if remoteHandler then
-			return remoteHandler
-		end
-		local ok, rh = pcall(function()
-			return require(RS.Modules.M3WS_FRAMEWORK.Services.RemoteHandler)
-		end)
-		if ok then
-			remoteHandler = rh
-		end
-		return remoteHandler
-	end
+	local pickUpFn
+	local lootTable
+	local apiLookupAt = 0
 
 	local function getAmmoCaps()
 		if ammoCaps then
@@ -52,58 +31,68 @@ function Loot.create(ctx)
 		return ammoCaps
 	end
 
-	local function getLootFolder()
-		if lootFolder and lootFolder.Parent then
-			return lootFolder
-		end
-		lootFolder = workspace:FindFirstChild("Loot")
-		return lootFolder
-	end
-
-	local function getModelPosition(model)
-		local part = model.PrimaryPart
-			or model:FindFirstChild("Main")
-			or model:FindFirstChild("Bottm")
-			or model:FindFirstChildWhichIsA("BasePart")
-		if part then
-			return part.Position
-		end
-	end
-
-	local function getLootId(model)
-		if not model then
-			return
-		end
-		local id = model:GetAttribute("ID")
-		if type(id) == "string" and #id > 8 then
-			return id
-		end
-		for _, child in model:GetChildren() do
-			if child:IsA("BasePart") then
-				id = child:GetAttribute("ID")
-				if type(id) == "string" and #id > 8 then
-					return id
-				end
-			elseif child:IsA("StringValue") and child.Name == "ID" then
-				return child.Value
-			end
-		end
-	end
-
-	local function getAmmoClipName(modelName)
-		if LOOT_AMMO_SHORT[modelName] then
-			return LOOT_AMMO_SHORT[modelName]
-		end
-		if modelName:find("Ammo", 1, true) then
-			return modelName
-		end
-	end
-
-	local function isAmmoModel(model)
-		if not model:IsA("Model") then
+	local function isLootEntry(entry)
+		if type(entry) ~= "table" then
 			return false
 		end
-		return getAmmoClipName(model.Name) ~= nil
+		local id = rawget(entry, "ID")
+		local pos = rawget(entry, "Position")
+		local typ = rawget(entry, "type")
+		return type(id) == "string"
+			and #id > 8
+			and typeof(pos) == "Vector3"
+			and type(typ) == "string"
+	end
+
+	local function ensurePickupApi()
+		if pickUpFn and lootTable then
+			return true
+		end
+		local now = tick()
+		if now - apiLookupAt < API_RETRY then
+			return false
+		end
+		apiLookupAt = now
+
+		local bestTable
+		local bestCount = 0
+		for _, value in getgc(true) do
+			if type(value) == "table" then
+				local count = 0
+				for _, entry in value do
+					if isLootEntry(entry) then
+						count += 1
+					end
+				end
+				if count > bestCount then
+					bestTable = value
+					bestCount = count
+				end
+			end
+		end
+		if bestCount > 0 then
+			lootTable = bestTable
+		end
+
+		for _, fn in getgc(true) do
+			if type(fn) == "function" then
+				for i = 1, 80 do
+					local ok, name, val = pcall(debug.getupvalue, fn, i)
+					if not ok or not name then
+						break
+					end
+					if name == "u83" and type(val) == "function" then
+						pickUpFn = val
+						break
+					end
+				end
+				if pickUpFn then
+					break
+				end
+			end
+		end
+
+		return pickUpFn ~= nil and lootTable ~= nil
 	end
 
 	local function isWoodFull()
@@ -137,21 +126,28 @@ function Loot.create(ctx)
 		return false
 	end
 
-	local function canPickupModel(model)
-		if not model:IsA("Model") then
+	local function canPickupEntry(entry)
+		if not isLootEntry(entry) then
 			return false
 		end
-		if model:GetAttribute("OPEN") == true then
+		if rawget(entry, "OPEN") == true then
 			return false
 		end
-		if model.Name == "Wood" and isWoodFull() then
+		local typ = rawget(entry, "type")
+		if typ == "Wood" and isWoodFull() then
 			return false
 		end
-		local clipName = getAmmoClipName(model.Name)
-		if clipName and isClipFull(clipName) then
+		if typ == "Ammo" then
+			local clipName = rawget(entry, "Name")
+			if clipName and isClipFull(clipName) then
+				return false
+			end
+		end
+		local ball = rawget(entry, "Ball")
+		if ball and not ball.Parent then
 			return false
 		end
-		return getLootId(model) ~= nil
+		return true
 	end
 
 	local function getPlayerRoot()
@@ -170,18 +166,40 @@ function Loot.create(ctx)
 		return char:FindFirstChild("HumanoidRootPart")
 	end
 
-	local function tryPickup(id)
+	local function getPickupRange()
+		local instant = ctx.flags.flagOn("InstantPickup")
+		local far = ctx.flags.flagOn("FarPickup")
+		local range = 0
+		if instant then
+			range = GAME_PICKUP_RANGE
+		end
+		if far then
+			local farRange = tonumber(ctx.flags.flagVal("PickupRange", ctx.config.DEFAULTS.PickupRange))
+				or ctx.config.DEFAULTS.PickupRange
+			range = math.max(range, farRange)
+		end
+		return math.min(range, GAME_PICKUP_RANGE)
+	end
+
+	local function getPickupAllRange()
+		local allRange = tonumber(ctx.flags.flagVal("PickupAllRange", ctx.config.DEFAULTS.PickupAllRange))
+			or ctx.config.DEFAULTS.PickupAllRange
+		return math.min(allRange, GAME_PICKUP_RANGE)
+	end
+
+	local function tryPickupEntry(entry)
+		if not ensurePickupApi() or not pickUpFn then
+			return false
+		end
+		local id = rawget(entry, "ID")
+		if not id then
+			return false
+		end
 		local now = tick()
 		if pickedCooldown[id] and now - pickedCooldown[id] < PICKUP_COOLDOWN then
 			return false
 		end
-		local rh = getRemoteHandler()
-		if not rh or type(rh.InvokeServer) ~= "function" then
-			return false
-		end
-		local ok = pcall(function()
-			rh.InvokeServer("PickedUpLoot", id)
-		end)
+		local ok = pcall(pickUpFn, entry, true)
 		if ok then
 			pickedCooldown[id] = now
 			return true
@@ -189,43 +207,24 @@ function Loot.create(ctx)
 		return false
 	end
 
-	local function getMaxRangeSq()
-		local instant = ctx.flags.flagOn("InstantPickup")
-		local far = ctx.flags.flagOn("FarPickup")
-		if not instant and not far then
-			return 0
-		end
-		local range = instant and INSTANT_RANGE or 0
-		if far then
-			local farRange = tonumber(ctx.flags.flagVal("PickupRange", ctx.config.DEFAULTS.PickupRange))
-				or ctx.config.DEFAULTS.PickupRange
-			range = math.max(range, farRange)
-		end
-		return range * range
-	end
-
-	local function getPickupAllRange()
-		return tonumber(ctx.flags.flagVal("PickupAllRange", ctx.config.DEFAULTS.PickupAllRange))
-			or ctx.config.DEFAULTS.PickupAllRange
-	end
-
 	local function collectTargets(maxRangeSq, ammoOnly)
-		local folder = getLootFolder()
+		if not ensurePickupApi() or not lootTable then
+			return {}
+		end
 		local root = getPlayerRoot()
-		if not folder or not root then
+		if not root then
 			return {}
 		end
 		local origin = root.Position
 		local targets = {}
-		for _, child in folder:GetChildren() do
-			if canPickupModel(child) and (not ammoOnly or isAmmoModel(child)) then
-				local pos = getModelPosition(child)
-				local id = getLootId(child)
-				if pos and id then
+		for _, entry in lootTable do
+			if canPickupEntry(entry) and (not ammoOnly or rawget(entry, "type") == "Ammo") then
+				local pos = rawget(entry, "Position")
+				if pos then
 					local delta = pos - origin
 					local distSq = delta.X * delta.X + delta.Y * delta.Y + delta.Z * delta.Z
 					if distSq <= maxRangeSq then
-						targets[#targets + 1] = { id = id, distSq = distSq }
+						targets[#targets + 1] = { entry = entry, distSq = distSq }
 					end
 				end
 			end
@@ -237,13 +236,13 @@ function Loot.create(ctx)
 	end
 
 	local function runPickup()
-		local maxRangeSq = getMaxRangeSq()
-		if maxRangeSq <= 0 then
+		local range = getPickupRange()
+		if range <= 0 then
 			return
 		end
-		local targets = collectTargets(maxRangeSq, true)
+		local targets = collectTargets(range * range, true)
 		if targets[1] then
-			tryPickup(targets[1].id)
+			tryPickupEntry(targets[1].entry)
 		end
 	end
 
@@ -257,9 +256,9 @@ function Loot.create(ctx)
 			local range = getPickupAllRange()
 			local targets = collectTargets(range * range, false)
 			for i = 1, math.min(#targets, PICKUP_ALL_BATCH) do
-				tryPickup(targets[i].id)
+				tryPickupEntry(targets[i].entry)
 				tried += 1
-				if i % 4 == 0 then
+				if i % 2 == 0 then
 					task.wait(PICKUP_ALL_DELAY)
 				end
 			end
@@ -277,7 +276,6 @@ function Loot.create(ctx)
 		end
 		active = want
 		pickupAccum = 0
-		lootFolder = nil
 		if not want then
 			table.clear(pickedCooldown)
 		end
