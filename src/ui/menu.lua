@@ -22,6 +22,7 @@ function Menu.create(ctx)
 	local silentSet = silentTab:CreateSection({ Name = "Settings", Side = "Right" })
 
 	local combatSec = combatTab:CreateSection({ Name = "Gun Mods", Side = "Left" })
+	local pickupSec = combatTab:CreateSection({ Name = "Pickup", Side = "Right" })
 
 	local espMain = espTab:CreateSection({ Name = "ESP", Side = "Left" })
 	local espSet = espTab:CreateSection({ Name = "Settings", Side = "Right" })
@@ -76,6 +77,17 @@ function Menu.create(ctx)
 	combatSec:AddToggle({ Name = "No Spread", Flag = "NoSpread", Value = false })
 	combatSec:AddToggle({ Name = "No Recoil", Flag = "NoRecoil", Value = false })
 	combatSec:AddToggle({ Name = "Instant Reload", Flag = "InstantReload", Value = false })
+
+	pickupSec:AddToggle({ Name = "Instant Pickup (Ammo)", Flag = "InstantPickup", Value = false })
+	pickupSec:AddToggle({ Name = "Far Pickup (Ammo)", Flag = "FarPickup", Value = false })
+	pickupSec:AddSlider({
+		Name = "Pickup Range",
+		Flag = "PickupRange",
+		Value = defaults.PickupRange,
+		Min = 50,
+		Max = 1500,
+		Textbox = true,
+	})
 
 	espMain:AddToggle({
 		Name = "Enabled",
