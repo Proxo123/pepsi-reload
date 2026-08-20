@@ -9,6 +9,7 @@ function Combat.create(ctx)
 	local fireHooks = {}
 	local reloadHooks = {}
 	local spreadFnOriginals = {}
+	local fireRateRestore = {}
 
 	local function restoreReloadHooks()
 		local stored = getgenv()._PepsiReloadHooks
@@ -124,6 +125,32 @@ function Combat.create(ctx)
 		return part.Position
 	end
 
+	local function getFireRateBoost()
+		local boost = tonumber(ctx.flags.flagVal("FireRateBoost", ctx.config.DEFAULTS.FireRateBoost))
+			or ctx.config.DEFAULTS.FireRateBoost
+		return math.clamp(boost, 1, 5)
+	end
+
+	local function applyFireRateBoost(gun)
+		if not state.rapidFireActive or not gun or not gun.Stats then
+			return
+		end
+		if fireRateRestore[gun] == nil then
+			fireRateRestore[gun] = gun.Stats.FireRate
+		end
+		local base = fireRateRestore[gun]
+		gun.Stats.FireRate = math.max(0.03, base / getFireRateBoost())
+	end
+
+	local function restoreFireRates()
+		for gun, base in fireRateRestore do
+			if gun.Stats then
+				gun.Stats.FireRate = base
+			end
+		end
+		table.clear(fireRateRestore)
+	end
+
 	local function installSilentRayHook()
 		if state.rayNamecallRestore or not hookmetamethod then
 			return
@@ -167,6 +194,7 @@ function Combat.create(ctx)
 	end
 
 	local function fireWithSilentRay(original, u14, p15)
+		applyFireRateBoost(u14)
 		local targetPos = getPredictedPos(state.silentTargetPart)
 		local normal = Vector3.new(0, 1, 0)
 		if u14 and u14.Handle then
@@ -218,6 +246,7 @@ function Combat.create(ctx)
 					local original = mod.Fire
 					mod._PepsiFireWrapped = true
 					mod.Fire = function(u14, p15)
+						applyFireRateBoost(u14)
 						if state.noSpreadActive or state.silentAimActive then
 							zeroSpreadValues()
 						end
@@ -481,6 +510,35 @@ function Combat.create(ctx)
 		end
 	end
 
+	local function enableRapidFire()
+		if state.rapidFireActive then
+			return
+		end
+		state.rapidFireActive = true
+		hookGunFiresOnce()
+	end
+
+	local function disableRapidFire()
+		if not state.rapidFireActive then
+			return
+		end
+		state.rapidFireActive = false
+		restoreFireRates()
+	end
+
+	local function syncRapidFireToggle()
+		local want = ctx.flags.flagOn("RapidFire")
+		if want == state.rapidFireFlagState then
+			return
+		end
+		state.rapidFireFlagState = want
+		if want then
+			enableRapidFire()
+		else
+			disableRapidFire()
+		end
+	end
+
 	local function enableNoRecoil()
 		if state.noRecoilActive then
 			return
@@ -522,6 +580,7 @@ function Combat.create(ctx)
 		disableNoSpread()
 		disableNoRecoil()
 		disableInstantReload()
+		disableRapidFire()
 		disableSilentAim()
 		unhookGiveRandomSpread()
 		unhookGunFires()
@@ -536,6 +595,7 @@ function Combat.create(ctx)
 		state.noSpreadFlagState = false
 		state.noRecoilFlagState = false
 		state.instantReloadFlagState = false
+		state.rapidFireFlagState = false
 		state.silentAimFlagState = false
 	end
 
@@ -545,6 +605,7 @@ function Combat.create(ctx)
 		syncSilentAimToggle = syncSilentAimToggle,
 		syncNoRecoilToggle = syncNoRecoilToggle,
 		syncInstantReloadToggle = syncInstantReloadToggle,
+		syncRapidFireToggle = syncRapidFireToggle,
 		disableAll = disableAll,
 	}
 end
