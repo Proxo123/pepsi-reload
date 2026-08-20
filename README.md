@@ -9,7 +9,7 @@ Modular Pepsi menu for **Reload BR** — loaded via GitHub `HttpGet` + `loadstri
 3. In your executor:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/pepsi-reload/main/loader.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/Proxo123/pepsi-reload/main/loader.lua"))()
 ```
 
 ## Project layout
