@@ -4,7 +4,7 @@ local PICKUP_HZ = 6
 local PICKUP_COOLDOWN = 0.45
 local MAX_PICKUPS_PER_TICK = 2
 local INSTANT_RANGE = 14
-local LOOT_TABLE_RETRY = 12
+local LOOT_TABLE_RETRY = 3
 local AMMO_INDEX_REFRESH = 4
 
 function Loot.create(ctx)
@@ -45,22 +45,34 @@ function Loot.create(ctx)
 		return ammoCaps
 	end
 
-	local function isLootEntry(entry)
-		return type(entry) == "table"
-			and type(entry.ID) == "string"
-			and #entry.ID > 8
-			and typeof(entry.Position) == "Vector3"
-			and entry.type == "Ammo"
+	local function readEntry(entry, key)
+		if type(entry) ~= "table" then
+			return
+		end
+		return rawget(entry, key)
+	end
+
+	local function isAmmoEntry(entry)
+		if type(entry) ~= "table" then
+			return false
+		end
+		local id = rawget(entry, "ID")
+		local pos = rawget(entry, "Position")
+		local lootType = rawget(entry, "type")
+		return type(id) == "string"
+			and #id > 8
+			and typeof(pos) == "Vector3"
+			and lootType == "Ammo"
 	end
 
 	local function scanLootTableOnce()
 		local best
 		local bestAmmo = 0
 		for _, value in getgc(true) do
-			if type(value) == "table" and not getmetatable(value) then
+			if type(value) == "table" then
 				local ammoCount = 0
 				for _, entry in value do
-					if isLootEntry(entry) then
+					if isAmmoEntry(entry) then
 						ammoCount += 1
 					end
 				end
@@ -89,10 +101,13 @@ function Loot.create(ctx)
 
 	local function refreshAmmoIndex(lootTable)
 		table.clear(ammoIndex)
-		for _, entry in lootTable do
-			if isLootEntry(entry) and not entry.Ignore and not entry.OPEN then
-				if not entry.Ball or entry.Ball.Parent then
-					ammoIndex[#ammoIndex + 1] = entry
+		for id, entry in lootTable do
+			if isAmmoEntry(entry) then
+				if not readEntry(entry, "Ignore") and not readEntry(entry, "OPEN") then
+					local ball = readEntry(entry, "Ball")
+					if not ball or ball.Parent then
+						ammoIndex[#ammoIndex + 1] = entry
+					end
 				end
 			end
 		end
@@ -143,17 +158,21 @@ function Loot.create(ctx)
 	end
 
 	local function canPickupAmmo(entry, fullClips)
-		if entry.Chest or entry.AmmoBox or entry.AirDrop then
+		if readEntry(entry, "Chest") or readEntry(entry, "AmmoBox") or readEntry(entry, "AirDrop") then
 			return false
 		end
-		if not entry.Name or fullClips[entry.Name] then
+		local name = readEntry(entry, "Name")
+		if not name or fullClips[name] then
 			return false
 		end
 		return true
 	end
 
-	local function tryPickup(entry)
-		local id = entry.ID
+	local function tryPickup(entry, lootTable)
+		local id = readEntry(entry, "ID")
+		if not id then
+			return false
+		end
 		local now = tick()
 		if pickedCooldown[id] and now - pickedCooldown[id] < PICKUP_COOLDOWN then
 			return false
@@ -162,11 +181,25 @@ function Loot.create(ctx)
 		if not rh or type(rh.InvokeServer) ~= "function" then
 			return false
 		end
+
 		local ok = pcall(function()
+			if lootTable then
+				lootTable[id] = nil
+			end
+			local ball = readEntry(entry, "Ball")
+			if ball and ball.Parent then
+				ball:Destroy()
+			end
 			rh.InvokeServer("PickedUpLoot", id)
 		end)
+
 		if ok then
 			pickedCooldown[id] = now
+			for i = #ammoIndex, 1, -1 do
+				if readEntry(ammoIndex[i], "ID") == id then
+					table.remove(ammoIndex, i)
+				end
+			end
 			return true
 		end
 		return false
@@ -222,23 +255,26 @@ function Loot.create(ctx)
 		for i = 1, #entries do
 			local entry = entries[i]
 			if canPickupAmmo(entry, fullClips) then
-				local delta = entry.Position - origin
-				local distSq = delta.X * delta.X + delta.Y * delta.Y + delta.Z * delta.Z
-				if distSq <= maxRangeSq then
-					if bestCount < MAX_PICKUPS_PER_TICK then
-						bestCount += 1
-						best[bestCount] = { distSq = distSq, entry = entry }
-					else
-						local worstIdx = 1
-						local worstDist = best[1].distSq
-						for j = 2, bestCount do
-							if best[j].distSq > worstDist then
-								worstDist = best[j].distSq
-								worstIdx = j
+				local pos = readEntry(entry, "Position")
+				if typeof(pos) == "Vector3" then
+					local delta = pos - origin
+					local distSq = delta.X * delta.X + delta.Y * delta.Y + delta.Z * delta.Z
+					if distSq <= maxRangeSq then
+						if bestCount < MAX_PICKUPS_PER_TICK then
+							bestCount += 1
+							best[bestCount] = { distSq = distSq, entry = entry }
+						else
+							local worstIdx = 1
+							local worstDist = best[1].distSq
+							for j = 2, bestCount do
+								if best[j].distSq > worstDist then
+									worstDist = best[j].distSq
+									worstIdx = j
+								end
 							end
-						end
-						if distSq < worstDist then
-							best[worstIdx] = { distSq = distSq, entry = entry }
+							if distSq < worstDist then
+								best[worstIdx] = { distSq = distSq, entry = entry }
+							end
 						end
 					end
 				end
@@ -248,7 +284,7 @@ function Loot.create(ctx)
 		local now = tick()
 		pruneCooldowns(now)
 		for i = 1, bestCount do
-			tryPickup(best[i].entry)
+			tryPickup(best[i].entry, lootTable)
 		end
 	end
 
@@ -258,7 +294,12 @@ function Loot.create(ctx)
 		end
 		active = want
 		pickupAccum = 0
-		if not want then
+		if want then
+			lootTableCache = nil
+			lootLookupFailedAt = 0
+			ammoIndexTime = 0
+			table.clear(ammoIndex)
+		else
 			lootTableCache = nil
 			ammoIndexTime = 0
 			table.clear(ammoIndex)
