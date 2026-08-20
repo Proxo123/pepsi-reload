@@ -114,7 +114,11 @@ function Aim.create(ctx)
 		if not partAlive(part) then
 			return
 		end
-		local targetPos = combat.getPredictedPos(part)
+		local targetPos = combat.getPredictedPos(part, {
+			character = t.character,
+			backtrackKey = t.key,
+			useBacktrack = false,
+		})
 		local worldDist = (targetPos - origin).Magnitude
 		if worldDist > range then
 			return
@@ -165,8 +169,24 @@ function Aim.create(ctx)
 			end
 		end
 		if best and wallCheck then
-			local targetPos = combat.getPredictedPos(best.aimPart)
+			local targetPos = combat.getPredictedPos(best.aimPart, {
+				character = best.character,
+				backtrackKey = best.key,
+				useBacktrack = false,
+			})
 			if not targetsApi.visible(origin, targetPos, best.character, best.key) then
+				return
+			end
+			combat.recordWallbangVisible(best.key, targetPos)
+		elseif best and ctx.flags.flagOn("Wallbang") then
+			local targetPos = combat.getPredictedPos(best.aimPart, {
+				character = best.character,
+				backtrackKey = best.key,
+				useBacktrack = false,
+			})
+			if targetsApi.visible(origin, targetPos, best.character, best.key) then
+				combat.recordWallbangVisible(best.key, targetPos)
+			elseif not combat.hasWallbangBacktrack(best.key) then
 				return
 			end
 		end

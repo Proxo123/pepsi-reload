@@ -55,6 +55,12 @@ function Menu.create(ctx)
 	silentMain:AddToggle({ Name = "Enabled", Flag = "SilentAim", Value = false })
 	silentMain:AddToggle({ Name = "Target Tracer", Flag = "SilentHandTracer", Value = false })
 	silentMain:AddToggle({ Name = "Wallbang", Flag = "Wallbang", Value = false })
+	silentMain:AddDropdown({
+		Name = "Wallbang Mode",
+		Flag = "WallbangMode",
+		Value = "Full",
+		List = { "Raycast", "No ServerPos", "Backtrack", "Full" },
+	})
 
 	silentSet:AddSlider({
 		Name = "Silent FOV",

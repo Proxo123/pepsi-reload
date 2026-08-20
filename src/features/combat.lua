@@ -1,5 +1,7 @@
 local Combat = {}
 
+local WALLBANG_BACKTRACK_TTL = 0.45
+
 function Combat.create(ctx)
 	local RS = ctx.services.RS
 	local lp = ctx.lp
@@ -8,6 +10,7 @@ function Combat.create(ctx)
 
 	local fireHooks = {}
 	local spreadFnOriginals = {}
+	local wallbangBacktrack = {}
 
 	local function restoreSpreadHooks()
 		local stored = getgenv()._PepsiSpreadOriginals
@@ -40,8 +43,117 @@ function Combat.create(ctx)
 	restoreSpreadHooks()
 	restoreFireHooks()
 
-	local function getPredictedPos(part)
-		return part.Position
+	local function getCharacterModel(part)
+		local model = part
+		while model and model ~= workspace do
+			if model:IsA("Model") and model:FindFirstChildOfClass("Humanoid") then
+				return model
+			end
+			model = model.Parent
+		end
+	end
+
+	local function readServerPos(char)
+		if not char then
+			return
+		end
+		local serverPos = char:GetAttribute("ServerPos")
+		if typeof(serverPos) == "Vector3" then
+			return serverPos
+		end
+	end
+
+	local function wallbangMode()
+		return ctx.flags.flagVal("WallbangMode", "Full")
+	end
+
+	local function wallbangUses(flag)
+		if not ctx.flags.flagOn("Wallbang") then
+			return false
+		end
+		local mode = wallbangMode()
+		if mode == "Full" then
+			return true
+		end
+		return mode == flag
+	end
+
+	local function isPlayerCharacter(char)
+		if not char then
+			return false
+		end
+		local plr = game:GetService("Players"):GetPlayerFromCharacter(char)
+		return plr ~= nil and plr ~= lp
+	end
+
+	local function getPredictedPos(part, opts)
+		if not part or not part.Position then
+			return
+		end
+		local pos = part.Position
+		if not ctx.flags.flagOn("Wallbang") then
+			return pos
+		end
+		local char = (opts and opts.character) or getCharacterModel(part)
+		if wallbangUses("Backtrack") and opts and opts.useBacktrack and opts.backtrackKey then
+			local cached = wallbangBacktrack[opts.backtrackKey]
+			if cached and tick() - cached.time <= WALLBANG_BACKTRACK_TTL then
+				return cached.pos
+			end
+		end
+		local serverPos = readServerPos(char)
+		if serverPos then
+			pos = serverPos
+		end
+		return pos
+	end
+
+	local function recordWallbangVisible(key, pos)
+		if key and pos and ctx.flags.flagOn("Wallbang") and wallbangUses("Backtrack") then
+			wallbangBacktrack[key] = { pos = pos, time = tick() }
+		end
+	end
+
+	local function hasWallbangBacktrack(key)
+		local cached = wallbangBacktrack[key]
+		return cached ~= nil and tick() - cached.time <= WALLBANG_BACKTRACK_TTL
+	end
+
+	local function shouldSuppressServerPos(part)
+		if not ctx.flags.flagOn("Wallbang") or not wallbangUses("No ServerPos") then
+			return false
+		end
+		local char = getCharacterModel(part)
+		return isPlayerCharacter(char)
+	end
+
+	local function installFireServerHook()
+		if state.fireServerRestore then
+			return
+		end
+		local ok, rh = pcall(function()
+			return require(RS.Modules.M3WS_FRAMEWORK.Services.RemoteHandler)
+		end)
+		if not ok or type(rh) ~= "table" or type(rh.FireServer) ~= "function" then
+			return
+		end
+		local original = rh.FireServer
+		rh.FireServer = function(service, action, ...)
+			local args = { ... }
+			if state.wallbangSuppressServerPos and service == "Server_Gun" and action == "Fire" and #args >= 12 then
+				args[12] = nil
+			end
+			return original(service, action, table.unpack(args))
+		end
+		state.fireServerRestore = { mod = rh, original = original }
+	end
+
+	local function restoreFireServerHook()
+		if not state.fireServerRestore then
+			return
+		end
+		state.fireServerRestore.mod.FireServer = state.fireServerRestore.original
+		state.fireServerRestore = nil
 	end
 
 	local function installSilentRayHook()
@@ -51,6 +163,15 @@ function Combat.create(ctx)
 		local old
 		old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
 			local method = getnamecallmethod()
+			if state.wallbangSuppressServerPos and method == "GetAttribute" then
+				local attr = select(1, ...)
+				if attr == "ServerPos" then
+					local char = state.silentTargetChar
+					if char and (self == char or (state.silentTargetPart and self == state.silentTargetPart.Parent)) then
+						return nil
+					end
+				end
+			end
 			if state.silentRayState and self == workspace then
 				if method == "FindPartOnRayWithIgnoreList" then
 					state.silentRayState.count = (state.silentRayState.count or 0) + 1
@@ -87,15 +208,21 @@ function Combat.create(ctx)
 	end
 
 	local function fireWithSilentRay(original, u14, p15)
-		local targetPos = getPredictedPos(state.silentTargetPart)
+		local rayOpts = {
+			character = state.silentTargetChar,
+			backtrackKey = state.silentTargetKey,
+			useBacktrack = ctx.flags.flagOn("Wallbang") and wallbangUses("Backtrack"),
+		}
+		local targetPos = getPredictedPos(state.silentTargetPart, rayOpts)
 		local normal = Vector3.new(0, 1, 0)
-		if u14 and u14.Handle then
+		if u14 and u14.Handle and targetPos then
 			local muzzle = (u14.Handle.CFrame * CFrame.new(0, 0, 0.5)).Position
 			local diff = targetPos - muzzle
 			if diff.Magnitude > 0.01 then
 				normal = -diff.Unit
 			end
 		end
+		state.wallbangSuppressServerPos = shouldSuppressServerPos(state.silentTargetPart)
 		state.silentRayState = {
 			part = state.silentTargetPart,
 			pos = targetPos,
@@ -105,6 +232,7 @@ function Combat.create(ctx)
 		}
 		local ok, err = pcall(original, u14, p15)
 		state.silentRayState = nil
+		state.wallbangSuppressServerPos = false
 		if not ok then
 			error(err)
 		end
@@ -179,7 +307,11 @@ function Combat.create(ctx)
 			end
 			af.GiveDirectionSpread = function(dir, ...)
 				if state.silentAimActive and state.silentTargetPart and state.silentTargetPart.Parent then
-					local targetPos = getPredictedPos(state.silentTargetPart)
+					local targetPos = getPredictedPos(state.silentTargetPart, {
+						character = state.silentTargetChar,
+						backtrackKey = state.silentTargetKey,
+						useBacktrack = ctx.flags.flagOn("Wallbang") and wallbangUses("Backtrack"),
+					})
 					local origin = gameApi.getGunMuzzlePos()
 					if not origin then
 						ctx.camera = workspace.CurrentCamera
@@ -288,6 +420,7 @@ function Combat.create(ctx)
 		end
 		state.silentAimActive = true
 		installSilentRayHook()
+		installFireServerHook()
 		hookGiveRandomSpreadOnce()
 		refreshDirectionSpreadHook()
 		hookGunFiresOnce()
@@ -362,6 +495,8 @@ function Combat.create(ctx)
 		disableSilentAim()
 		unhookGiveRandomSpread()
 		unhookGunFires()
+		restoreFireServerHook()
+		table.clear(wallbangBacktrack)
 		if state.rayNamecallRestore and hookmetamethod then
 			pcall(function()
 				hookmetamethod(game, "__namecall", state.rayNamecallRestore)
@@ -376,6 +511,8 @@ function Combat.create(ctx)
 
 	return {
 		getPredictedPos = getPredictedPos,
+		recordWallbangVisible = recordWallbangVisible,
+		hasWallbangBacktrack = hasWallbangBacktrack,
 		syncNoSpreadToggle = syncNoSpreadToggle,
 		syncSilentAimToggle = syncSilentAimToggle,
 		syncNoRecoilToggle = syncNoRecoilToggle,

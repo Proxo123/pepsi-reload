@@ -102,6 +102,7 @@ function Main.start(import)
 		local silentTarget = ctx.aim.getSilentTarget(targetList)
 		ctx.state.silentTargetPart = silentTarget and silentTarget.aimPart or nil
 		ctx.state.silentTargetChar = silentTarget and silentTarget.character or nil
+		ctx.state.silentTargetKey = silentTarget and silentTarget.key or nil
 		if silentTarget then
 			ctx.state.silentTargetHead = silentTarget.character and silentTarget.character:FindFirstChild("Head")
 				or silentTarget.aimPart
@@ -160,6 +161,7 @@ function Main.start(import)
 		ctx.state.silentTargetPart = nil
 		ctx.state.silentTargetHead = nil
 		ctx.state.silentTargetChar = nil
+		ctx.state.silentTargetKey = nil
 		ctx.state.lockedTargetKey = nil
 		ctx.combat.disableAll()
 		pcall(function()
