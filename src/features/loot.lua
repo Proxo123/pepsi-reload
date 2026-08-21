@@ -14,13 +14,14 @@ local FALLBACK_AMMO = {
 	["Arrow"] = true,
 }
 
+-- Reload stores clips under short names (Light/Medium/Heavy) and AmmoCaps uses the same keys.
 local LOOT_AMMO_SHORT = {
-	Light = "Light Ammo",
-	Medium = "Medium Ammo",
-	Heavy = "Heavy Ammo",
-	Rocket = "Rocket Ammo",
-	Shells = "Shells",
-	Shotgun = "Shells",
+	Light = "Light",
+	Medium = "Medium",
+	Heavy = "Heavy",
+	Rocket = "Rocket",
+	Shells = "Shotgun",
+	Shotgun = "Shotgun",
 	Arrow = "Arrow",
 }
 
@@ -169,21 +170,32 @@ function Loot.create(ctx)
 	end
 
 	local function isClipFull(modelName)
-		local clipName = getClipName(modelName)
-		if not clipName then
-			return true
-		end
 		local char = lp.Character
 		local clips = char and char:FindFirstChild("AmmoClips")
 		if not clips then
+			return true
+		end
+		local caps = getAmmoCaps()
+
+		if modelName == "AmmoBox" then
+			for _, clip in clips:GetChildren() do
+				local cap = caps and caps[clip.Name]
+				if not cap or clip.Value < cap then
+					return false
+				end
+			end
+			return true
+		end
+
+		local clipName = getClipName(modelName)
+		if not clipName then
 			return true
 		end
 		local clip = clips:FindFirstChild(clipName)
 		if not clip then
 			return true
 		end
-		local caps = getAmmoCaps()
-		local cap = caps and caps[clipName]
+		local cap = caps and caps[clip.Name]
 		if cap and clip.Value >= cap then
 			return true
 		end
