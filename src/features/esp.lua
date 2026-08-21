@@ -47,7 +47,10 @@ function Esp.create(ctx)
 			if show then
 				local headWorld, feetWorld, rootPos = liveWorld(t)
 				if not rootPos or (rootPos - origin).Magnitude > maxDist then
-					show = false
+					draw.hidePack(pack)
+					if ctx.highlights[t.key] then
+						ctx.highlights[t.key].Enabled = false
+					end
 				else
 				local okBox, x, y, w, h, labelPos, feetPos = draw.screenBox(headWorld, feetWorld, rootPos)
 				local boxVis = ctx.flags.flagOn("ESPBoxes") and okBox == true

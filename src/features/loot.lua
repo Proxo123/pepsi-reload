@@ -14,6 +14,16 @@ local FALLBACK_AMMO = {
 	["Arrow"] = true,
 }
 
+-- Only these workspace.Loot model names are ammo piles (not guns like Shotgun/Scar).
+local AMMO_LOOT_NAMES = {
+	Light = true,
+	Medium = true,
+	Heavy = true,
+	Rocket = true,
+	AmmoBox = true,
+	Shells = true,
+}
+
 -- Reload stores clips under short names (Light/Medium/Heavy) and AmmoCaps uses the same keys.
 local LOOT_AMMO_SHORT = {
 	Light = "Light",
@@ -21,8 +31,6 @@ local LOOT_AMMO_SHORT = {
 	Heavy = "Heavy",
 	Rocket = "Rocket",
 	Shells = "Shotgun",
-	Shotgun = "Shotgun",
-	Arrow = "Arrow",
 }
 
 function Loot.create(ctx)
@@ -143,14 +151,7 @@ function Loot.create(ctx)
 	end
 
 	local function isAmmoModel(model)
-		if not model:IsA("Model") then
-			return false
-		end
-		local names = loadAmmoNames()
-		if names[model.Name] then
-			return true
-		end
-		return model.Name:find("Ammo", 1, true) ~= nil
+		return model:IsA("Model") and AMMO_LOOT_NAMES[model.Name] == true
 	end
 
 	local function getPlayerRoot()

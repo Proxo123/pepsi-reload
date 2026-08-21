@@ -158,6 +158,14 @@ function Main.start(import)
 					end
 				end
 			end
+		else
+			for _, pack in pairs(ctx.drawings) do
+				ctx.draw.hidePack(pack)
+			end
+			for _, hl in pairs(ctx.highlights) do
+				hl.Enabled = false
+			end
+			ctx.state.lastSeenEsp = {}
 		end
 	end
 
