@@ -12,6 +12,7 @@ function Menu.create(ctx)
 	local aimTab = window:CreateTab({ Name = "Aimbot" })
 	local silentTab = window:CreateTab({ Name = "Silent" })
 	local combatTab = window:CreateTab({ Name = "Combat" })
+	local buildTab = window:CreateTab({ Name = "Build" })
 	local espTab = window:CreateTab({ Name = "ESP" })
 	local colorTab = window:CreateTab({ Name = "Colors" })
 
@@ -22,6 +23,9 @@ function Menu.create(ctx)
 	local silentSet = silentTab:CreateSection({ Name = "Settings", Side = "Right" })
 
 	local combatSec = combatTab:CreateSection({ Name = "Gun Mods", Side = "Left" })
+
+	local buildSec = buildTab:CreateSection({ Name = "Build Tests", Side = "Left" })
+	local buildSet = buildTab:CreateSection({ Name = "Settings", Side = "Right" })
 
 	local espMain = espTab:CreateSection({ Name = "ESP", Side = "Left" })
 	local espSet = espTab:CreateSection({ Name = "Settings", Side = "Right" })
@@ -76,6 +80,46 @@ function Menu.create(ctx)
 	combatSec:AddToggle({ Name = "No Spread", Flag = "NoSpread", Value = false })
 	combatSec:AddToggle({ Name = "No Recoil", Flag = "NoRecoil", Value = false })
 	combatSec:AddToggle({ Name = "Instant Reload", Flag = "InstantReload", Value = false })
+
+	buildSec:AddToggle({ Name = "Build Tests Enabled", Flag = "BuildTestEnabled", Value = false })
+	buildSec:AddToggle({
+		Name = "1v1 Far Box (crosshair)",
+		Flag = "BuildBoxHotkey",
+		Value = false,
+		Keybind = { Value = Enum.KeyCode.B, Mode = "Press" },
+	})
+	buildSec:AddToggle({
+		Name = "Pyramid Spam (off-grid)",
+		Flag = "BuildPyramidHotkey",
+		Value = false,
+		Keybind = { Value = Enum.KeyCode.N, Mode = "Press" },
+	})
+
+	buildSet:AddSlider({
+		Name = "Place Delay",
+		Flag = "BuildPlaceDelay",
+		Value = defaults.BuildPlaceDelay,
+		Min = 0.05,
+		Max = 0.5,
+		Precise = 2,
+		Textbox = true,
+	})
+	buildSet:AddSlider({
+		Name = "Pyramid Count",
+		Flag = "BuildPyramidCount",
+		Value = defaults.BuildPyramidCount,
+		Min = 1,
+		Max = 6,
+		Textbox = true,
+	})
+	buildSet:AddSlider({
+		Name = "Pyramid Yaw Offset",
+		Flag = "BuildPyramidYaw",
+		Value = defaults.BuildPyramidYaw,
+		Min = -180,
+		Max = 180,
+		Textbox = true,
+	})
 
 	espMain:AddToggle({
 		Name = "Enabled",
