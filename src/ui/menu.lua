@@ -83,8 +83,8 @@ function Menu.create(ctx)
 
 	buildSec:AddToggle({ Name = "Build Tests Enabled", Flag = "BuildTestEnabled", Value = false })
 	buildSec:AddToggle({
-		Name = "1v1 Far Box (crosshair)",
-		Flag = "BuildBoxHotkey",
+		Name = "Wall Spam (crosshair)",
+		Flag = "BuildWallHotkey",
 		Value = false,
 		Keybind = { Value = Enum.KeyCode.B, Mode = "Press" },
 	})
@@ -104,12 +104,11 @@ function Menu.create(ctx)
 		Textbox = true,
 	})
 	buildSet:AddSlider({
-		Name = "Place Delay",
-		Flag = "BuildPlaceDelay",
-		Value = defaults.BuildPlaceDelay,
-		Min = 0.05,
-		Max = 0.5,
-		Precise = 2,
+		Name = "Wall Count",
+		Flag = "BuildWallCount",
+		Value = defaults.BuildWallCount,
+		Min = 4,
+		Max = 24,
 		Textbox = true,
 	})
 	buildSet:AddSlider({
@@ -117,7 +116,7 @@ function Menu.create(ctx)
 		Flag = "BuildPyramidCount",
 		Value = defaults.BuildPyramidCount,
 		Min = 1,
-		Max = 6,
+		Max = 12,
 		Textbox = true,
 	})
 	buildSet:AddSlider({

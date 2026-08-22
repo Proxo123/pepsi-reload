@@ -2,7 +2,7 @@ local Build = {}
 
 local GRID = 18
 local HALF = 9
-local PLACE_DELAY = 0.12
+local DEFAULT_WALL_COUNT = 10
 
 local function grid(n)
 	return math.floor(n / GRID + 0.5) * GRID
@@ -146,48 +146,77 @@ function Build.create(ctx)
 		return "Default"
 	end
 
+	local function preparePreview(preview, buildType, worldCFrame, guid, variant)
+		preview.Parent = workspace.Builds
+		preview:SetAttribute("Current", variant)
+		preview:PivotTo(worldCFrame)
+		preview:SetAttribute("ID", guid)
+
+		local cfVal = Instance.new("CFrameValue")
+		cfVal.Name = "CF"
+		cfVal.Value = worldCFrame
+		cfVal.Parent = preview
+
+		local ogVal = Instance.new("CFrameValue")
+		ogVal.Name = "OGCF"
+		ogVal.Value = preview.Builds.Default.CFrame
+		ogVal.Parent = preview
+
+		local defaultPart = preview.Builds:FindFirstChild("Default")
+		if defaultPart then
+			defaultPart.Transparency = 0
+		end
+
+		for _, desc in preview:GetDescendants() do
+			if desc.Name == "Main" then
+				desc:Destroy()
+			elseif desc:IsA("BasePart") and desc.Name ~= buildType then
+				desc.CanCollide = false
+			end
+		end
+	end
+
 	local function placePiece(buildType, worldCFrame)
 		local template = BuildingAssets:FindFirstChild(buildType)
 		if not template or not template:FindFirstChild("Builds") then
-			return false, "missing template"
+			return false
 		end
 
 		local defaultPart = template.Builds:FindFirstChild("Default")
 		if not defaultPart then
-			return false, "missing default"
+			return false
 		end
 
+		local preview = template:Clone()
 		local guid = HttpService:GenerateGUID(false)
 		local variant = defaultVariant(buildType)
-		local terrainTouch = touchesTerrain(worldCFrame)
+		local defaultCF = defaultPart.CFrame
 
-		local ok, ret1, ret2 = pcall(function()
+		preparePreview(preview, buildType, worldCFrame, guid, variant)
+
+		local ok, ret1 = pcall(function()
 			return placeRemote:InvokeServer(
 				buildType,
 				worldCFrame,
 				variant,
-				defaultPart.CFrame,
+				defaultCF,
 				guid,
-				terrainTouch
+				touchesTerrain(worldCFrame)
 			)
 		end)
 
 		if not ok then
-			return false, ret1
+			preview:Destroy()
+			return false
 		end
 
-		-- Client treats first return as failure payload when truthy.
 		if ret1 then
-			return false, "server rejected"
+			preview:Destroy()
+			return false
 		end
 
-		return true, ret2
-	end
-
-	local function floorCFrame(x, y, z, yawDeg)
-		local rot = CFrame.Angles(0, math.rad(yawDeg), 0)
-		local cf = CFrame.new(x, y, z) * rot
-		return cf * (CFrame.Angles(0, math.rad(90), math.rad(90)) * CFrame.new(HALF, 0, HALF))
+		-- Keep the client preview. Destroying it immediately can break BuildServer.
+		return true
 	end
 
 	local function wallCFrame(x, y, z, yawDeg)
@@ -196,10 +225,11 @@ function Build.create(ctx)
 		return cf * (CFrame.Angles(0, math.rad(90), 0) * CFrame.new(HALF, 0, HALF))
 	end
 
-	local function coneCFrame(worldPos, yawDeg)
+	local function coneCFrame(worldPos, yawDeg, pitchOffset)
 		local rot = CFrame.Angles(0, math.rad(yawDeg), 0)
 		local cf = CFrame.new(worldPos) * rot
-		return cf * CFrame.new(0, 3, 0) * CFrame.Angles(math.pi / 2, 0, 0)
+		cf = cf * CFrame.new(0, 3 + (pitchOffset or 0), 0)
+		return cf * CFrame.Angles(math.pi / 2, 0, 0)
 	end
 
 	local function getYawTowardTarget(targetPos)
@@ -241,23 +271,20 @@ function Build.create(ctx)
 
 		local placed = 0
 		local failed = 0
-		local delay = tonumber(ctx.flags.flagVal("BuildPlaceDelay", PLACE_DELAY)) or PLACE_DELAY
 
 		for _, piece in ipairs(pieces) do
-			local ok = placePiece(piece.type, piece.cf)
-			if ok then
+			if placePiece(piece.type, piece.cf) then
 				placed += 1
 			else
 				failed += 1
 			end
-			task.wait(math.clamp(delay, 0.05, 1))
 		end
 
 		notify(string.format("%s: %d placed, %d failed", label, placed, failed), 5)
 		busy = false
 	end
 
-	local function boxTarget(target)
+	local function wallSpamTarget(target)
 		if not ctx.flags.flagOn("BuildTestEnabled") then
 			return
 		end
@@ -269,27 +296,35 @@ function Build.create(ctx)
 		end
 
 		local wood = getWood()
-		if wood < 30 and RS.GameInfo.InfMats.Value == false then
-			notify("Low wood (" .. wood .. ") — need ~30 for full box", 4)
+		local wallCount = math.clamp(
+			math.floor(tonumber(ctx.flags.flagVal("BuildWallCount", DEFAULT_WALL_COUNT)) or DEFAULT_WALL_COUNT),
+			4,
+			24
+		)
+		if wood < wallCount * 5 and RS.GameInfo.InfMats.Value == false then
+			notify("Low wood (" .. wood .. ") — need ~" .. wallCount * 5, 4)
 		end
 
 		local center = root.Position
-		local cx = grid(center.X)
-		local cy = grid(center.Y)
-		local cz = grid(center.Z)
+		local baseY = grid(center.Y)
 		local yaw = getYawTowardTarget(center)
+		local pieces = {}
 
-		local pieces = {
-			{ type = "Floor", cf = floorCFrame(cx, cy, cz, yaw) },
-			{ type = "Wall", cf = wallCFrame(cx, cy, cz, yaw) },
-			{ type = "Wall", cf = wallCFrame(cx, cy, cz, yaw + 90) },
-			{ type = "Wall", cf = wallCFrame(cx, cy, cz, yaw + 180) },
-			{ type = "Wall", cf = wallCFrame(cx, cy, cz, yaw + 270) },
-			{ type = "Floor", cf = floorCFrame(cx, cy + GRID, cz, yaw) },
-		}
+		for i = 0, wallCount - 1 do
+			local angle = yaw + (360 / wallCount) * i
+			local rad = math.rad(angle)
+			local offset = Vector3.new(math.sin(rad) * GRID, 0, math.cos(rad) * GRID)
+			local wx = center.X + offset.X
+			local wz = center.Z + offset.Z
+			local wy = baseY + (i % 2) * GRID
+			table.insert(pieces, {
+				type = "Wall",
+				cf = wallCFrame(wx, wy, wz, angle + 90),
+			})
+		end
 
-		notify("Boxing " .. target.name .. " (far test)", 3)
-		task.spawn(runSequence, "Far box", pieces)
+		notify("Wall spam on " .. target.name .. " x" .. wallCount, 3)
+		task.spawn(runSequence, "Wall spam", pieces)
 	end
 
 	local function pyramidTarget(target)
@@ -306,25 +341,26 @@ function Build.create(ctx)
 		local pos = root.Position
 		local yaw = getYawTowardTarget(pos) + (tonumber(ctx.flags.flagVal("BuildPyramidYaw", 0)) or 0)
 		local count = math.clamp(
-			math.floor(tonumber(ctx.flags.flagVal("BuildPyramidCount", 3)) or 3),
+			math.floor(tonumber(ctx.flags.flagVal("BuildPyramidCount", 5)) or 5),
 			1,
-			6
+			12
 		)
 
 		local pieces = {}
 		for i = 0, count - 1 do
-			local offset = Vector3.new(math.sin(i * 1.4) * 2, 3 + i * 2.5, math.cos(i * 1.4) * 2)
+			local spin = math.rad(i * 47 + yaw)
+			local offset = Vector3.new(math.sin(spin) * (2 + i * 0.8), 2 + i * 3, math.cos(spin) * (2 + i * 0.8))
 			table.insert(pieces, {
 				type = "Cone",
-				cf = coneCFrame(pos + offset, yaw + i * 37),
+				cf = coneCFrame(pos + offset, yaw + i * 29, i * 0.5),
 			})
 		end
 
-		notify("Pyramids on " .. target.name .. " (off-grid)", 3)
-		task.spawn(runSequence, "Pyramid test", pieces)
+		notify("Pyramids on " .. target.name .. " x" .. count, 3)
+		task.spawn(runSequence, "Pyramid spam", pieces)
 	end
 
-	local function onAction(boxKey, pyramidKey, input)
+	local function onAction(wallKey, pyramidKey, input)
 		if input.UserInputType ~= Enum.UserInputType.Keyboard then
 			return
 		end
@@ -336,15 +372,12 @@ function Build.create(ctx)
 		end
 
 		local target = getCrosshairTarget()
-		if input.KeyCode == boxKey then
-			boxTarget(target)
+		if input.KeyCode == wallKey then
+			wallSpamTarget(target)
 		elseif input.KeyCode == pyramidKey then
 			pyramidTarget(target)
 		end
 	end
-
-	local boxKey = keyFromHotkeyFlag("BuildBoxHotkey", Enum.KeyCode.B)
-	local pyramidKey = keyFromHotkeyFlag("BuildPyramidHotkey", Enum.KeyCode.N)
 
 	table.insert(
 		ctx.connections,
@@ -352,14 +385,14 @@ function Build.create(ctx)
 			if processed then
 				return
 			end
-			boxKey = keyFromHotkeyFlag("BuildBoxHotkey", Enum.KeyCode.B)
-			pyramidKey = keyFromHotkeyFlag("BuildPyramidHotkey", Enum.KeyCode.N)
-			onAction(boxKey, pyramidKey, input)
+			local wallKey = keyFromHotkeyFlag("BuildWallHotkey", Enum.KeyCode.B)
+			local pyramidKey = keyFromHotkeyFlag("BuildPyramidHotkey", Enum.KeyCode.N)
+			onAction(wallKey, pyramidKey, input)
 		end)
 	)
 
 	return {
-		boxTarget = boxTarget,
+		wallSpamTarget = wallSpamTarget,
 		pyramidTarget = pyramidTarget,
 		getCrosshairTarget = getCrosshairTarget,
 		placePiece = placePiece,
