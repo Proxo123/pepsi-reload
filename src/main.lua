@@ -10,7 +10,6 @@ function Main.start(import)
 	local AimMod = import("src/features/aim")
 	local EspMod = import("src/features/esp")
 	local TracersMod = import("src/features/tracers")
-	local LootMod = import("src/features/loot")
 	local MenuMod = import("src/ui/menu")
 
 	local Players = game:GetService("Players")
@@ -73,7 +72,6 @@ function Main.start(import)
 	ctx.aim = AimMod.create(ctx)
 	ctx.esp = EspMod.create(ctx)
 	ctx.tracers = TracersMod.create(ctx)
-	ctx.loot = LootMod.create(ctx)
 	MenuMod.create(ctx)
 
 	local fovCircle = ctx.draw.drawing("Circle", { Filled = false, Thickness = 1, NumSides = 48, ZIndex = 4 })
@@ -87,8 +85,6 @@ function Main.start(import)
 			or ctx.flags.flagOn("NoSpread")
 			or ctx.flags.flagOn("NoRecoil")
 			or ctx.flags.flagOn("InstantReload")
-			or ctx.flags.flagOn("InstantPickup")
-			or ctx.flags.flagOn("FarPickup")
 	end
 
 	local function needsVisuals()
@@ -237,9 +233,6 @@ function Main.start(import)
 				ctx.combat.syncNoRecoilToggle()
 				ctx.combat.syncInstantReloadToggle()
 				ctx.combat.syncSilentAimToggle()
-				if ctx.loot then
-					ctx.loot.tick(dt)
-				end
 				if not needsLogic() then
 					return
 				end
