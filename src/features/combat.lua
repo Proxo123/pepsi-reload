@@ -132,12 +132,8 @@ function Combat.create(ctx)
 		old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
 			local method = getnamecallmethod()
 			if state.silentRayState and self == workspace then
-				if method == "FindPartOnRayWithIgnoreList" then
-					state.silentRayState.count = (state.silentRayState.count or 0) + 1
-					local redirect = state.silentRayState.wallbang or state.silentRayState.count == 1
-					if redirect then
-						return state.silentRayState.part, state.silentRayState.pos, state.silentRayState.normal
-					end
+				if method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRay" then
+					return state.silentRayState.part, state.silentRayState.pos, state.silentRayState.normal
 				elseif method == "Raycast" and state.silentRayState.wallbang then
 					local args = { ... }
 					local origin = args[1]

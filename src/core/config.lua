@@ -1,8 +1,8 @@
 -- Update REPO after pushing to GitHub (raw.githubusercontent.com user/repo/branch/)
 return {
-	VERSION = "v47-modular",
+	VERSION = "v48-modular",
 	REPO = "https://raw.githubusercontent.com/Proxo123/pepsi-reload/main/",
-	AIM_STEP = "PepsiReloadAim_v47",
+	AIM_STEP = "PepsiReloadAim_v48",
 	LIBRARY_ID = "rbxassetid://7657867786",
 	DEFAULTS = {
 		AimSmoothness = 1,
@@ -14,5 +14,6 @@ return {
 		BuildPlaceDelay = 0.12,
 		BuildPyramidCount = 3,
 		BuildPyramidYaw = 0,
+		BuildTargetFOV = 200,
 	},
 }

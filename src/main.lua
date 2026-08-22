@@ -87,6 +87,7 @@ function Main.start(import)
 			or ctx.flags.flagOn("NoSpread")
 			or ctx.flags.flagOn("NoRecoil")
 			or ctx.flags.flagOn("InstantReload")
+			or ctx.flags.flagOn("BuildTestEnabled")
 	end
 
 	local function needsVisuals()

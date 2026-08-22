@@ -68,44 +68,69 @@ function Build.create(ctx)
 			return nil
 		end
 
-		local vp = camera.ViewportSize
-		local ray = camera:ViewportPointToRay(vp.X * 0.5, vp.Y * 0.5)
-		rayParams.FilterDescendantsInstances = getIgnore()
-		local hit = workspace:Raycast(ray.Origin, ray.Direction * 2500, rayParams)
-		if not hit then
-			return nil
-		end
+		local targetList = ctx.targets.collectTargets()
+		local origin = camera.CFrame.Position
+		local center = camera.ViewportSize * 0.5
+		local fov = tonumber(ctx.flags.flagVal("BuildTargetFOV", ctx.config.DEFAULTS.BuildTargetFOV))
+			or ctx.config.DEFAULTS.BuildTargetFOV
+		local range = tonumber(ctx.flags.flagVal("AimRange", ctx.config.DEFAULTS.AimRange))
+			or ctx.config.DEFAULTS.AimRange
 
-		local model = hit.Instance:FindFirstAncestorOfClass("Model")
-		if not model then
-			return nil
-		end
+		local best
+		local bestScore
 
-		local hum = model:FindFirstChildOfClass("Humanoid")
-		local root = model:FindFirstChild("HumanoidRootPart")
-		if not hum or not root or hum.Health <= 0 then
-			return nil
-		end
-
-		if model == lp.Character then
-			return nil
-		end
-
-		local player = game.Players:GetPlayerFromCharacter(model)
-		if player then
-			if gameApi.isTeammate(player) then
-				return nil
+		for _, t in ipairs(targetList) do
+			if t.player and gameApi.isTeammate(t.player) then
+				continue
 			end
-			if gameApi.isPlayerDead(player) then
-				return nil
+			if t.player and gameApi.isPlayerDead(t.player) then
+				continue
 			end
+
+			local part = t.aimPart or t.root
+			if not part or not part.Position then
+				continue
+			end
+
+			local screenPos, onScreen = camera:WorldToViewportPoint(part.Position)
+			if not onScreen or screenPos.Z <= 0 then
+				continue
+			end
+
+			local screenDist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+			local worldDist = (part.Position - origin).Magnitude
+			if screenDist > fov or worldDist > range then
+				continue
+			end
+
+			if not bestScore or screenDist < bestScore then
+				best = t
+				bestScore = screenDist
+			end
+		end
+
+		if not best then
+			return nil
+		end
+
+		local root = best.root
+		if best.player and not root then
+			local wsModel = gameApi.findWorkspacePlayerModel(best.player.Name)
+			root = wsModel and wsModel:FindFirstChild("HumanoidRootPart") or root
+		end
+		if not root then
+			root = best.character and best.character:FindFirstChild("HumanoidRootPart")
+		end
+		if not root then
+			return nil
 		end
 
 		return {
-			character = model,
+			character = best.character,
 			root = root,
-			player = player,
-			name = player and player.Name or model.Name,
+			player = best.player,
+			isBot = best.isBot,
+			name = best.name,
 		}
 	end
 

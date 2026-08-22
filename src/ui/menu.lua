@@ -96,6 +96,14 @@ function Menu.create(ctx)
 	})
 
 	buildSet:AddSlider({
+		Name = "Target FOV",
+		Flag = "BuildTargetFOV",
+		Value = defaults.BuildTargetFOV,
+		Min = 50,
+		Max = 600,
+		Textbox = true,
+	})
+	buildSet:AddSlider({
 		Name = "Place Delay",
 		Flag = "BuildPlaceDelay",
 		Value = defaults.BuildPlaceDelay,
