@@ -18,28 +18,45 @@ function Targets.create(ctx)
 	local visCacheTime = {}
 	local VIS_CACHE_TTL = 0.35
 
-	local function getAimPart(char, root, head, isBot, wsKnown)
-		if ctx.flags.flagVal("AimPart", "Head") == "Torso" then
+	local function resolveAimPart(char, root, head, isNpc, wsKnown)
+		local choice = ctx.flags.flagVal("AimPart", "Head")
+		if choice == "HumanoidRootPart" then
+			return root
+		end
+		if choice == "UpperTorso" or choice == "Torso" then
 			return char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or root
 		end
+		if choice == "LowerTorso" then
+			return char:FindFirstChild("LowerTorso") or char:FindFirstChild("Torso") or root
+		end
+		if choice == "Random" then
+			local parts = { head, root }
+			for _, name in { "UpperTorso", "LowerTorso", "LeftUpperArm", "RightUpperArm" } do
+				local part = char:FindFirstChild(name)
+				if part then
+					table.insert(parts, part)
+				end
+			end
+			return parts[math.random(1, #parts)] or root
+		end
 		if head and root then
-			if isBot or wsKnown then
+			if isNpc or wsKnown then
 				if (head.Position - root.Position).Magnitude <= 50 then
 					return head
 				end
 			end
 		end
-		if head and not isBot and wsKnown and (head.Position - root.Position).Magnitude <= 3 then
+		if head and not isNpc and wsKnown and (head.Position - root.Position).Magnitude <= 3 then
 			return head
 		end
-		return root
+		return head or root
 	end
 
-	local function getLogicalParts(char, isBot, plr, wsModel)
+	local function getLogicalParts(char, isNpc, plr, wsModel)
 		if not char then
 			return
 		end
-		if not isBot and plr then
+		if not isNpc and plr then
 			char = wsModel or gameApi.pickBestModel(plr, char) or char
 		end
 		local hum = char:FindFirstChildOfClass("Humanoid")
@@ -47,27 +64,26 @@ function Targets.create(ctx)
 		if not hum or hum.Health <= 0 or not root then
 			return
 		end
-		if not isBot and gameApi.isLobbyPosition(root.Position) then
+		if not isNpc and gameApi.isLobbyPosition(root.Position) then
 			return
 		end
 		local head = char:FindFirstChild("Head")
-		local wsKnown = isBot or char.Parent == workspace or wsModel == char
-		local hiddenPlayer = not isBot and not wsKnown
-		local split = hiddenPlayer or not head
+		local wsKnown = isNpc or char.Parent == workspace or wsModel == char
+		local split = (not isNpc and not wsKnown) or not head
 		if not split and head and root and (head.Position - root.Position).Magnitude > 3 then
 			split = true
 		end
 		local headWorld = split and (root.Position + Vector3.new(0, 2.8, 0)) or head.Position
 		local feetWorld = root.Position - Vector3.new(0, 3.2, 0)
-		return hum, root, getAimPart(char, root, head, isBot, wsKnown), headWorld, feetWorld, char
+		return hum, root, resolveAimPart(char, root, head, isNpc, wsKnown), headWorld, feetWorld, char
 	end
 
 	local function addPlayerTarget(list, seenPlayers, plr, char, wsModel)
-		if not plr or plr == lp or seenPlayers[plr.UserId] or gameApi.isPlayerDead(plr) then
+		if not plr or plr == lp or seenPlayers[plr.UserId] then
 			return
 		end
 		local hum, root, aimPart, headWorld, feetWorld, bestChar = getLogicalParts(char, false, plr, wsModel)
-		if not hum then
+		if not hum or gameApi.isPlayerDead(plr, hum) then
 			return
 		end
 		seenPlayers[plr.UserId] = true
@@ -80,7 +96,7 @@ function Targets.create(ctx)
 			aimPart = aimPart,
 			headWorld = headWorld,
 			feetWorld = feetWorld,
-			name = plr.Name,
+			name = plr.DisplayName ~= "" and plr.DisplayName or plr.Name,
 			isBot = false,
 		})
 	end
@@ -103,9 +119,12 @@ function Targets.create(ctx)
 		if wsMe then
 			table.insert(rayIgnoreList, wsMe)
 		end
-		local ig = workspace:FindFirstChild("Ignore")
-		if ig then
-			table.insert(rayIgnoreList, ig)
+		local ignoreName = gameApi.getRayIgnoreFolderName()
+		if ignoreName then
+			local ig = workspace:FindFirstChild(ignoreName)
+			if ig then
+				table.insert(rayIgnoreList, ig)
+			end
 		end
 		return rayIgnoreList
 	end
@@ -134,21 +153,50 @@ function Targets.create(ctx)
 
 	local function getColor(target)
 		if target.player and gameApi.isTeammate(target.player) then
-			return ctx.flags.flagVal("SquadColor", Color3.fromRGB(80, 220, 120))
+			return ctx.flags.flagVal("TeamColor", Color3.fromRGB(80, 220, 120))
 		end
 		if target.isBot then
-			return ctx.flags.flagVal("BotColor", Color3.fromRGB(255, 170, 50))
+			return ctx.flags.flagVal("NPCColor", Color3.fromRGB(255, 170, 50))
 		end
 		return ctx.flags.flagVal("PlayerColor", Color3.fromRGB(255, 70, 70))
 	end
 
+	local function addNpcTargets(list)
+		if not ctx.flags.flagOn("ShowNPCs") then
+			return
+		end
+		for _, folderName in ipairs(gameApi.getNpcFolders()) do
+			local folder = workspace:FindFirstChild(folderName)
+			if folder then
+				for _, model in folder:GetChildren() do
+					if model:IsA("Model") then
+						local hum, root, aimPart, headWorld, feetWorld, bestChar = getLogicalParts(model, true)
+						if hum then
+							table.insert(list, {
+								key = "n" .. folderName .. "_" .. model.Name,
+								character = bestChar or model,
+								hum = hum,
+								root = root,
+								aimPart = aimPart,
+								headWorld = headWorld,
+								feetWorld = feetWorld,
+								name = model.Name,
+								isBot = true,
+							})
+						end
+					end
+				end
+			end
+		end
+	end
+
 	local function rebuildTargets()
 		local list = {}
-		if not (ctx.flags.flagOn("ESPEnabled") or ctx.flags.flagOn("AimEnabled") or ctx.flags.flagOn("SilentAim")) then
+		if not (ctx.flags.flagOn("ESPEnabled") or ctx.flags.flagOn("AimEnabled")) then
 			return list
 		end
 		local seenPlayers = {}
-		local wantPlayers = ctx.flags.flagOn("ShowPlayers") or ctx.flags.flagOn("AimEnabled") or ctx.flags.flagOn("SilentAim")
+		local wantPlayers = ctx.flags.flagOn("ShowPlayers") or ctx.flags.flagOn("AimEnabled")
 		if wantPlayers then
 			for _, plr in Players:GetPlayers() do
 				if plr ~= lp then
@@ -158,29 +206,7 @@ function Targets.create(ctx)
 				end
 			end
 		end
-		if ctx.flags.flagOn("ShowBots") or ctx.flags.flagOn("AimEnabled") or ctx.flags.flagOn("SilentAim") then
-			local bots = workspace:FindFirstChild("Bots")
-			if bots then
-				for _, model in bots:GetChildren() do
-					if model:IsA("Model") then
-						local hum, root, aimPart, headWorld, feetWorld, bestChar = getLogicalParts(model, true)
-						if hum then
-							table.insert(list, {
-								key = "b" .. model.Name,
-								character = bestChar or model,
-								hum = hum,
-								root = root,
-								aimPart = aimPart,
-								headWorld = headWorld,
-								feetWorld = feetWorld,
-								name = model.Name .. " [BOT]",
-								isBot = true,
-							})
-						end
-					end
-				end
-			end
-		end
+		addNpcTargets(list)
 		return list
 	end
 
@@ -199,16 +225,16 @@ function Targets.create(ctx)
 	end
 
 	local function isValidAimTarget(t)
-		if t.player and ctx.flags.flagOn("SquadCheck") and gameApi.isTeammate(t.player) then
+		if t.player and ctx.flags.flagOn("TeamCheck") and gameApi.isTeammate(t.player) then
 			return false
 		end
-		if t.player and not ctx.flags.flagOn("ShowPlayers") and not ctx.flags.flagOn("SilentAim") and not ctx.flags.flagOn("AimEnabled") then
+		if t.player and not ctx.flags.flagOn("ShowPlayers") and not ctx.flags.flagOn("AimEnabled") then
 			return false
 		end
-		if t.isBot and not ctx.flags.flagOn("ShowBots") and not ctx.flags.flagOn("SilentAim") and not ctx.flags.flagOn("AimEnabled") then
+		if t.isBot and not ctx.flags.flagOn("ShowNPCs") and not ctx.flags.flagOn("AimEnabled") then
 			return false
 		end
-		if t.player and gameApi.isPlayerDead(t.player) then
+		if t.player and gameApi.isPlayerDead(t.player, t.hum) then
 			return false
 		end
 		return true

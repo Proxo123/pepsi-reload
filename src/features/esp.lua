@@ -39,11 +39,15 @@ function Esp.create(ctx)
 			if t.player and not ctx.flags.flagOn("ShowPlayers") then
 				show = false
 			end
-			if t.isBot and not ctx.flags.flagOn("ShowBots") then
+			if t.isBot and not ctx.flags.flagOn("ShowNPCs") then
 				show = false
 			end
 			local pack = draw.getPack(t.key)
 			local color = ctx.targets.getColor(t)
+			local boxThickness = tonumber(ctx.flags.flagVal("ESPBoxThickness", ctx.config.DEFAULTS.ESPBoxThickness))
+				or ctx.config.DEFAULTS.ESPBoxThickness
+			local textSize = tonumber(ctx.flags.flagVal("ESPTextSize", ctx.config.DEFAULTS.ESPTextSize))
+				or ctx.config.DEFAULTS.ESPTextSize
 			if show then
 				local headWorld, feetWorld, rootPos = liveWorld(t)
 				if not rootPos or (rootPos - origin).Magnitude > maxDist then
@@ -57,17 +61,28 @@ function Esp.create(ctx)
 				draw.setVisible(pack.box, boxVis)
 				draw.setVisible(pack.boxOut, boxVis)
 				if boxVis and pack.box and pack.boxOut then
+					pack.box.Thickness = boxThickness
+					pack.boxOut.Thickness = boxThickness + 2
 					pack.box.Color = color
 					pack.box.Position = Vector2.new(x, y)
 					pack.box.Size = Vector2.new(w, h)
 					pack.boxOut.Position = Vector2.new(x, y)
 					pack.boxOut.Size = Vector2.new(w, h)
 				end
+				local tracerOrigin = ctx.flags.flagVal("ESPTracerOrigin", "Bottom")
+				local tracerFrom
+				if tracerOrigin == "Center" then
+					tracerFrom = Vector2.new(center.X, center.Y)
+				elseif tracerOrigin == "Top" then
+					tracerFrom = Vector2.new(center.X, 0)
+				else
+					tracerFrom = Vector2.new(center.X, vp.Y)
+				end
 				local tracerVis = ctx.flags.flagOn("ESPTracers") and feetPos and feetPos.Z > 0
 				draw.setVisible(pack.tracer, tracerVis)
 				if tracerVis and pack.tracer then
 					pack.tracer.Color = color
-					pack.tracer.From = Vector2.new(center.X, vp.Y)
+					pack.tracer.From = tracerFrom
 					pack.tracer.To = Vector2.new(feetPos.X, feetPos.Y)
 				end
 				local textVis = (ctx.flags.flagOn("ESPNames") or ctx.flags.flagOn("ESPDistance")) and labelPos and labelPos.Z > 0
@@ -78,6 +93,7 @@ function Esp.create(ctx)
 						label = label .. (label ~= "" and "\n" or "") .. string.format("[%d]", (rootPos - origin).Magnitude)
 					end
 					pack.text.Text = label
+					pack.text.Size = textSize
 					pack.text.Color = color
 					pack.text.Position = Vector2.new(labelPos.X, labelPos.Y - 16)
 				end

@@ -6,47 +6,56 @@ function Menu.create(ctx)
 	local ConfigStore = ctx.configStore
 
 	local window = ctx.library:CreateWindow({
-		Name = "Pepsi Reload",
-		Themeable = { Info = "Reload " .. version, Credit = true },
+		Name = "Pepsi Hub",
+		Themeable = { Info = version, Credit = true },
 	})
 
 	local aimTab = window:CreateTab({ Name = "Aimbot" })
-	local silentTab = window:CreateTab({ Name = "Silent" })
-	local combatTab = window:CreateTab({ Name = "Combat" })
-	local buildTab = window:CreateTab({ Name = "Build" })
 	local espTab = window:CreateTab({ Name = "ESP" })
+	local targetTab = window:CreateTab({ Name = "Targeting" })
 	local colorTab = window:CreateTab({ Name = "Colors" })
+	local settingsTab = window:CreateTab({ Name = "Settings" })
 
 	local aimMain = aimTab:CreateSection({ Name = "Aimbot", Side = "Left" })
-	local aimSet = aimTab:CreateSection({ Name = "Settings", Side = "Right" })
-
-	local silentMain = silentTab:CreateSection({ Name = "Silent Aim", Side = "Left" })
-	local silentSet = silentTab:CreateSection({ Name = "Settings", Side = "Right" })
-
-	local combatSec = combatTab:CreateSection({ Name = "Gun Mods", Side = "Left" })
-
-	local buildSec = buildTab:CreateSection({ Name = "Build Tests", Side = "Left" })
-	local buildSet = buildTab:CreateSection({ Name = "Settings", Side = "Right" })
+	local aimSet = aimTab:CreateSection({ Name = "Tuning", Side = "Right" })
 
 	local espMain = espTab:CreateSection({ Name = "ESP", Side = "Left" })
-	local espSet = espTab:CreateSection({ Name = "Settings", Side = "Right" })
+	local espSet = espTab:CreateSection({ Name = "Display", Side = "Right" })
+
+	local targetMain = targetTab:CreateSection({ Name = "Targets", Side = "Left" })
+	local targetSet = targetTab:CreateSection({ Name = "Game Setup", Side = "Right" })
 
 	local colSec = colorTab:CreateSection({ Name = "Colors", Side = "Left" })
+	local configSec = settingsTab:CreateSection({ Name = "Configs", Side = "Left" })
+	local autoloadSec = settingsTab:CreateSection({ Name = "Autoload", Side = "Right" })
 
-	aimMain:AddToggle({ Name = "Enabled", Flag = "AimEnabled", Value = true })
-	aimMain:AddToggle({ Name = "Squad Check", Flag = "SquadCheck", Value = true })
+	aimMain:AddToggle({ Name = "Enabled", Flag = "AimEnabled", Value = false })
+	aimMain:AddToggle({ Name = "Team Check", Flag = "TeamCheck", Value = true })
 	aimMain:AddToggle({ Name = "Wall Check", Flag = "AimWallCheck", Value = true })
+	aimMain:AddToggle({ Name = "Sticky Target", Flag = "AimSticky", Value = true })
 	aimMain:AddToggle({ Name = "Show FOV", Flag = "AimShowFOV", Value = true })
+	aimMain:AddToggle({ Name = "Prediction", Flag = "AimPrediction", Value = false })
 	aimMain:AddDropdown({
 		Name = "Activation",
 		Flag = "AimMode",
 		Value = "Mouse2 Held",
 		List = { "Mouse2 Held", "Mouse1 Held", "Always" },
 	})
-	aimMain:AddDropdown({ Name = "Target Part", Flag = "AimPart", Value = "Head", List = { "Head", "Torso" } })
+	aimMain:AddDropdown({
+		Name = "Target Part",
+		Flag = "AimPart",
+		Value = "Head",
+		List = { "Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "Random" },
+	})
+	aimMain:AddDropdown({
+		Name = "Priority",
+		Flag = "AimPriority",
+		Value = "Crosshair",
+		List = { "Crosshair", "Distance" },
+	})
 
 	aimSet:AddSlider({
-		Name = "Lock Strength",
+		Name = "Smoothness",
 		Flag = "AimSmoothness",
 		Value = defaults.AimSmoothness,
 		Min = 0.05,
@@ -54,89 +63,27 @@ function Menu.create(ctx)
 		Precise = 2,
 		Textbox = true,
 	})
-	aimSet:AddSlider({ Name = "FOV", Flag = "AimFOV", Value = defaults.AimFOV, Min = 10, Max = 500, Textbox = true })
-	aimSet:AddSlider({ Name = "Range", Flag = "AimRange", Value = defaults.AimRange, Min = 50, Max = 2500, Textbox = true })
-
-	silentMain:AddToggle({ Name = "Enabled", Flag = "SilentAim", Value = false })
-	silentMain:AddToggle({ Name = "Target Tracer", Flag = "SilentHandTracer", Value = false })
-	silentMain:AddToggle({ Name = "Wallbang (Bots)", Flag = "Wallbang", Value = false })
-
-	silentSet:AddSlider({
-		Name = "Silent FOV",
-		Flag = "SilentFOV",
-		Value = defaults.SilentFOV,
-		Min = 50,
-		Max = 1200,
+	aimSet:AddSlider({ Name = "FOV", Flag = "AimFOV", Value = defaults.AimFOV, Min = 10, Max = 800, Textbox = true })
+	aimSet:AddSlider({ Name = "Range", Flag = "AimRange", Value = defaults.AimRange, Min = 50, Max = 5000, Textbox = true })
+	aimSet:AddSlider({
+		Name = "Prediction Lead",
+		Flag = "AimPredictionLead",
+		Value = defaults.AimPredictionLead,
+		Min = 0,
+		Max = 0.5,
+		Precise = 3,
 		Textbox = true,
 	})
-	silentSet:AddSlider({
-		Name = "Silent Angle",
-		Flag = "SilentAngleFOV",
-		Value = defaults.SilentAngleFOV,
-		Min = 5,
-		Max = 90,
-		Textbox = true,
-	})
-
-	combatSec:AddToggle({ Name = "No Spread", Flag = "NoSpread", Value = false })
-	combatSec:AddToggle({ Name = "No Recoil", Flag = "NoRecoil", Value = false })
-	combatSec:AddToggle({ Name = "Instant Reload", Flag = "InstantReload", Value = false })
-
-	buildSec:AddToggle({ Name = "Build Tests Enabled", Flag = "BuildTestEnabled", Value = false })
-	buildSec:AddToggle({
-		Name = "Wall Spam (crosshair)",
-		Flag = "BuildWallHotkey",
-		Value = false,
-		Keybind = { Value = Enum.KeyCode.B, Mode = "Press" },
-	})
-	buildSec:AddToggle({
-		Name = "Pyramid Spam (off-grid)",
-		Flag = "BuildPyramidHotkey",
-		Value = false,
-		Keybind = { Value = Enum.KeyCode.N, Mode = "Press" },
-	})
-
-	buildSet:AddSlider({
-		Name = "Target FOV",
-		Flag = "BuildTargetFOV",
-		Value = defaults.BuildTargetFOV,
-		Min = 50,
-		Max = 600,
-		Textbox = true,
-	})
-	buildSet:AddSlider({
-		Name = "Wall Count",
-		Flag = "BuildWallCount",
-		Value = defaults.BuildWallCount,
-		Min = 4,
-		Max = 24,
-		Textbox = true,
-	})
-	buildSet:AddSlider({
-		Name = "Pyramid Count",
-		Flag = "BuildPyramidCount",
-		Value = defaults.BuildPyramidCount,
-		Min = 1,
-		Max = 12,
-		Textbox = true,
-	})
-	buildSet:AddSlider({
-		Name = "Pyramid Yaw Offset",
-		Flag = "BuildPyramidYaw",
-		Value = defaults.BuildPyramidYaw,
-		Min = -180,
-		Max = 180,
-		Textbox = true,
-	})
+	aimSet:AddSlider({ Name = "FOV Thickness", Flag = "AimFOVThickness", Value = 1, Min = 1, Max = 4, Textbox = true })
 
 	espMain:AddToggle({
 		Name = "Enabled",
 		Flag = "ESPEnabled",
-		Value = true,
+		Value = false,
 		Keybind = { Value = Enum.KeyCode.U, Mode = "Toggle" },
 	})
 	espMain:AddToggle({ Name = "Players", Flag = "ShowPlayers", Value = true })
-	espMain:AddToggle({ Name = "Bots", Flag = "ShowBots", Value = true })
+	espMain:AddToggle({ Name = "NPCs", Flag = "ShowNPCs", Value = false })
 	espMain:AddToggle({ Name = "Boxes", Flag = "ESPBoxes", Value = true })
 	espMain:AddToggle({ Name = "Names", Flag = "ESPNames", Value = true })
 	espMain:AddToggle({ Name = "Distance", Flag = "ESPDistance", Value = true })
@@ -148,20 +95,75 @@ function Menu.create(ctx)
 		Name = "Max Distance",
 		Flag = "ESPMaxDistance",
 		Value = defaults.ESPMaxDistance,
-		Min = 100,
-		Max = 5000,
+		Min = 50,
+		Max = 10000,
+		Textbox = true,
+	})
+	espSet:AddSlider({
+		Name = "Text Size",
+		Flag = "ESPTextSize",
+		Value = defaults.ESPTextSize,
+		Min = 10,
+		Max = 24,
+		Textbox = true,
+	})
+	espSet:AddSlider({
+		Name = "Box Thickness",
+		Flag = "ESPBoxThickness",
+		Value = defaults.ESPBoxThickness,
+		Min = 1,
+		Max = 4,
+		Textbox = true,
+	})
+	espSet:AddDropdown({
+		Name = "Tracer Origin",
+		Flag = "ESPTracerOrigin",
+		Value = "Bottom",
+		List = { "Bottom", "Center", "Top" },
+	})
+
+	targetMain:AddDropdown({
+		Name = "Team Check Mode",
+		Flag = "TeamCheckMode",
+		Value = "Off",
+		List = { "Off", "Roblox Team", "Friends" },
+	})
+	targetMain:AddSlider({
+		Name = "Target Refresh (Hz)",
+		Flag = "TargetRefreshHz",
+		Value = defaults.TargetRefreshHz,
+		Min = 5,
+		Max = 60,
 		Textbox = true,
 	})
 
-	colSec:AddColorpicker({ Name = "Players", Flag = "PlayerColor", Value = Color3.fromRGB(255, 70, 70) })
-	colSec:AddColorpicker({ Name = "Bots", Flag = "BotColor", Value = Color3.fromRGB(255, 170, 50) })
-	colSec:AddColorpicker({ Name = "Squad / Team", Flag = "SquadColor", Value = Color3.fromRGB(80, 220, 120) })
-	colSec:AddColorpicker({ Name = "FOV Circle", Flag = "AimFOVColor", Value = Color3.fromRGB(255, 255, 255) })
-	colSec:AddColorpicker({ Name = "Silent Tracer", Flag = "SilentTracerColor", Value = Color3.fromRGB(255, 80, 255) })
+	targetSet:AddToggle({ Name = "Use Workspace Models", Flag = "UseWorkspaceModels", Value = true })
+	targetSet:AddToggle({ Name = "Filter Lobby Spawn", Flag = "FilterLobbySpawn", Value = false })
+	targetSet:AddSlider({
+		Name = "Lobby Min Y",
+		Flag = "LobbyMinY",
+		Value = defaults.LobbyMinY,
+		Min = 0,
+		Max = 500,
+		Textbox = true,
+	})
+	targetSet:AddTextbox({
+		Name = "NPC Folders",
+		Flag = "NPCFolders",
+		Value = "",
+		Placeholder = "Bots, NPCs, Enemies",
+	})
+	targetSet:AddTextbox({
+		Name = "Ray Ignore Folder",
+		Flag = "RayIgnoreFolder",
+		Value = "Ignore",
+		Placeholder = "Ignore",
+	})
 
-	local settingsTab = window:CreateTab({ Name = "Settings" })
-	local configSec = settingsTab:CreateSection({ Name = "Configs", Side = "Left" })
-	local autoloadSec = settingsTab:CreateSection({ Name = "Autoload", Side = "Right" })
+	colSec:AddColorpicker({ Name = "Players", Flag = "PlayerColor", Value = Color3.fromRGB(255, 70, 70) })
+	colSec:AddColorpicker({ Name = "NPCs", Flag = "NPCColor", Value = Color3.fromRGB(255, 170, 50) })
+	colSec:AddColorpicker({ Name = "Team", Flag = "TeamColor", Value = Color3.fromRGB(80, 220, 120) })
+	colSec:AddColorpicker({ Name = "FOV Circle", Flag = "AimFOVColor", Value = Color3.fromRGB(255, 255, 255) })
 
 	local workspaceName = ctx.config.CONFIG_WORKSPACE
 	local defaultProfile = ctx.config.DEFAULT_CONFIG
@@ -208,7 +210,7 @@ function Menu.create(ctx)
 	})
 
 	pcall(function()
-		window:CreateDesigner({ Credit = true, Info = "Reload " .. version })
+		window:CreateDesigner({ Credit = true, Info = version })
 	end)
 
 	task.defer(function()

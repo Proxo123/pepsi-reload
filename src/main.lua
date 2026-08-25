@@ -4,24 +4,32 @@ function Main.start(import)
 	local Config = import("src/core/config")
 	local FlagsMod = import("src/core/flags")
 	local DrawingMod = import("src/features/draw")
-	local GameMod = import("src/game/reload")
+	local GameMod = import("src/game/generic")
 	local TargetsMod = import("src/features/targets")
-	local CombatMod = import("src/features/combat")
 	local AimMod = import("src/features/aim")
 	local EspMod = import("src/features/esp")
-	local TracersMod = import("src/features/tracers")
-	local BuildMod = import("src/features/build")
 	local MenuMod = import("src/ui/menu")
 	local ConfigStoreMod = import("src/core/config_store")
 
 	local Players = game:GetService("Players")
-	local RS = game:GetService("ReplicatedStorage")
 	local RunService = game:GetService("RunService")
 	local UIS = game:GetService("UserInputService")
 	local CoreGui = game:GetService("CoreGui")
 	local lp = Players.LocalPlayer
 
-	for _, step in { "PepsiReloadAim", "PepsiReloadAim_v12", "PepsiReloadAim_v13", "PepsiReloadAim_v14", "PepsiReloadAim_v15", "PepsiReloadAim_v16", "PepsiReloadAim_v17", "PepsiReloadAim_v18", Config.AIM_STEP } do
+	for _, step in {
+		"PepsiReloadAim",
+		"PepsiReloadAim_v12",
+		"PepsiReloadAim_v13",
+		"PepsiReloadAim_v14",
+		"PepsiReloadAim_v15",
+		"PepsiReloadAim_v16",
+		"PepsiReloadAim_v17",
+		"PepsiReloadAim_v18",
+		"PepsiReloadAim_v49",
+		"PepsiReloadAim_v50",
+		Config.AIM_STEP,
+	} do
 		pcall(function()
 			RunService:UnbindFromRenderStep(step)
 		end)
@@ -43,7 +51,6 @@ function Main.start(import)
 		connections = {},
 		services = {
 			Players = Players,
-			RS = RS,
 			RunService = RunService,
 			UIS = UIS,
 			CoreGui = CoreGui,
@@ -51,18 +58,7 @@ function Main.start(import)
 		state = {
 			renderWarned = false,
 			aimTargetPart = nil,
-			silentTargetPart = nil,
-			silentTargetHead = nil,
-			silentTargetChar = nil,
 			lockedTargetKey = nil,
-			directionSpreadRestore = nil,
-			fireRecoilRestore = nil,
-			noSpreadActive = false,
-			noSpreadFlagState = false,
-			noRecoilActive = false,
-			noRecoilFlagState = false,
-			silentAimActive = false,
-			silentAimFlagState = false,
 			cachedTargetList = {},
 			lastSeenEsp = {},
 		},
@@ -72,31 +68,23 @@ function Main.start(import)
 	ctx.game = GameMod.create(ctx)
 	ctx.draw = DrawingMod.create(ctx)
 	ctx.targets = TargetsMod.create(ctx)
-	ctx.combat = CombatMod.create(ctx)
 	ctx.aim = AimMod.create(ctx)
 	ctx.esp = EspMod.create(ctx)
-	ctx.tracers = TracersMod.create(ctx)
-	ctx.build = BuildMod.create(ctx)
 	ctx.menu = MenuMod.create(ctx)
 
 	local fovCircle = ctx.draw.drawing("Circle", { Filled = false, Thickness = 1, NumSides = 48, ZIndex = 4 })
 	local logicAccum = 0
-	local LOGIC_HZ = 30
+
+	local function logicHz()
+		return tonumber(ctx.flags.flagVal("TargetRefreshHz", Config.DEFAULTS.TargetRefreshHz)) or Config.DEFAULTS.TargetRefreshHz
+	end
 
 	local function needsLogic()
-		return ctx.flags.flagOn("ESPEnabled")
-			or ctx.flags.flagOn("AimEnabled")
-			or ctx.flags.flagOn("SilentAim")
-			or ctx.flags.flagOn("NoSpread")
-			or ctx.flags.flagOn("NoRecoil")
-			or ctx.flags.flagOn("InstantReload")
-			or ctx.flags.flagOn("BuildTestEnabled")
+		return ctx.flags.flagOn("ESPEnabled") or ctx.flags.flagOn("AimEnabled")
 	end
 
 	local function needsVisuals()
-		return ctx.flags.flagOn("ESPEnabled")
-			or ctx.flags.flagOn("AimShowFOV")
-			or (ctx.flags.flagOn("SilentAim") and ctx.flags.flagOn("SilentHandTracer"))
+		return ctx.flags.flagOn("ESPEnabled") or ctx.flags.flagOn("AimShowFOV")
 	end
 
 	local function runLogic()
@@ -105,18 +93,6 @@ function Main.start(import)
 
 		local aimTarget = ctx.aim.getAimTarget(targetList)
 		ctx.state.aimTargetPart = aimTarget and aimTarget.aimPart or nil
-
-		local silentTarget = ctx.aim.getSilentTarget(targetList)
-		ctx.state.silentTargetPart = silentTarget and silentTarget.aimPart or nil
-		ctx.state.silentTargetChar = silentTarget and silentTarget.character or nil
-		ctx.state.silentTargetIsBot = silentTarget and silentTarget.isBot or nil
-		if silentTarget then
-			ctx.state.silentTargetHead = silentTarget.character and silentTarget.character:FindFirstChild("Head")
-				or silentTarget.aimPart
-		else
-			ctx.state.silentTargetHead = nil
-			ctx.state.silentTargetChar = nil
-		end
 	end
 
 	local function runVisuals()
@@ -135,13 +111,8 @@ function Main.start(import)
 				fovCircle.Position = center
 				fovCircle.Radius = tonumber(ctx.flags.flagVal("AimFOV", Config.DEFAULTS.AimFOV)) or Config.DEFAULTS.AimFOV
 				fovCircle.Color = ctx.flags.flagVal("AimFOVColor", Color3.new(1, 1, 1))
+				fovCircle.Thickness = tonumber(ctx.flags.flagVal("AimFOVThickness", 1)) or 1
 			end
-		end
-
-		if ctx.flags.flagOn("SilentAim") and ctx.flags.flagOn("SilentHandTracer") then
-			ctx.tracers.updateSilentTracer(center)
-		elseif ctx.tracers then
-			ctx.tracers.updateSilentTracer(nil)
 		end
 
 		if ctx.flags.flagOn("ESPEnabled") then
@@ -173,12 +144,7 @@ function Main.start(import)
 
 	local function unload()
 		ctx.state.aimTargetPart = nil
-		ctx.state.silentTargetPart = nil
-		ctx.state.silentTargetHead = nil
-		ctx.state.silentTargetChar = nil
-		ctx.state.silentTargetIsBot = nil
 		ctx.state.lockedTargetKey = nil
-		ctx.combat.disableAll()
 		pcall(function()
 			RunService:UnbindFromRenderStep(Config.AIM_STEP)
 		end)
@@ -195,9 +161,6 @@ function Main.start(import)
 			ctx.draw.clearKey(k)
 		end
 		ctx.draw.destroyDrawing(fovCircle)
-		if ctx.tracers then
-			ctx.tracers.destroy()
-		end
 		pcall(function()
 			library.unload()
 		end)
@@ -235,22 +198,19 @@ function Main.start(import)
 					unload()
 					return
 				end
-				ctx.combat.syncNoSpreadToggle()
-				ctx.combat.syncNoRecoilToggle()
-				ctx.combat.syncInstantReloadToggle()
-				ctx.combat.syncSilentAimToggle()
 				if not needsLogic() then
 					return
 				end
 				logicAccum += dt
-				if logicAccum >= (1 / LOGIC_HZ) then
+				local hz = math.clamp(logicHz(), 5, 60)
+				if logicAccum >= (1 / hz) then
 					logicAccum = 0
 					runLogic()
 				end
 			end)
 			if not ok and not ctx.state.renderWarned then
 				ctx.state.renderWarned = true
-				warn("[Pepsi Reload] " .. tostring(err))
+				warn("[Pepsi Hub] " .. tostring(err))
 			end
 		end)
 	)
@@ -271,13 +231,13 @@ function Main.start(import)
 			end)
 			if not ok and not ctx.state.renderWarned then
 				ctx.state.renderWarned = true
-				warn("[Pepsi Reload] " .. tostring(err))
+				warn("[Pepsi Hub] " .. tostring(err))
 			end
 		end)
 	)
 
-	library:Notify({ Text = Config.VERSION .. " loaded from GitHub modules.", Time = 6 })
-	print("[Pepsi Reload " .. Config.VERSION .. "] loaded")
+	library:Notify({ Text = Config.VERSION .. " loaded.", Time = 6 })
+	print("[Pepsi Hub " .. Config.VERSION .. "] loaded")
 end
 
 return Main
