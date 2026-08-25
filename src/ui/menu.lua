@@ -113,7 +113,7 @@ function Menu.create(ctx)
 	miscSec:AddToggle({
 		Name = "Fake Saber In Melee Locker",
 		Flag = "FakeMeleeEnabled",
-		Value = true,
+		Value = false,
 		Callback = function(enabled)
 			if not ctx.fakeMelee then
 				return

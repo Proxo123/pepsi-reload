@@ -3,13 +3,18 @@ local FakeMelee = {}
 local ARSENAL_PLACE_ID = 286090429
 local FAKE_ATTR = "PepsiFakeMelee"
 local DEFAULT_MELEE = "Saber"
+local INJECT_COOLDOWN = 2
 
 function FakeMelee.create(ctx)
 	local lp = ctx.lp
 	local connections = {}
+	local injecting = false
+	local lastInject = 0
+	local scrollWatchBound = false
 
 	local function getLockerScroll()
-		local menew = lp:FindFirstChild("PlayerGui") and lp.PlayerGui:FindFirstChild("Menew")
+		local playerGui = lp:FindFirstChild("PlayerGui")
+		local menew = playerGui and playerGui:FindFirstChild("Menew")
 		local locker = menew and menew:FindFirstChild("Locker")
 		local equipping = locker and locker:FindFirstChild("Equipping")
 		return equipping and equipping:FindFirstChild("ScrollingFrame")
@@ -17,7 +22,7 @@ function FakeMelee.create(ctx)
 
 	local function findTemplate(scroll)
 		local preferred = scroll:FindFirstChild("Dagger")
-		if preferred and preferred:IsA("GuiObject") then
+		if preferred and preferred:IsA("GuiObject") and not preferred:GetAttribute(FAKE_ATTR) then
 			return preferred
 		end
 		for _, child in ipairs(scroll:GetChildren()) do
@@ -33,39 +38,6 @@ function FakeMelee.create(ctx)
 				desc.Text = text
 			end
 		end
-	end
-
-	local function hideCountBadges(root)
-		for _, desc in ipairs(root:GetDescendants()) do
-			if desc:IsA("TextLabel") and (desc.Name == "Count" or desc.Name == "CraftCount") then
-				desc.Text = "x1"
-				desc.Visible = true
-			end
-			if desc:IsA("ImageLabel") and desc.Name == "Check" then
-				desc.Visible = true
-			end
-		end
-	end
-
-	local function setupViewport(root, meleeName)
-		local viewport = root:FindFirstChild("ViewportFrame", true)
-		local meleeFolder = game:GetService("ReplicatedStorage"):FindFirstChild("Melees")
-		local meleeDef = meleeFolder and meleeFolder:FindFirstChild(meleeName)
-		local model = meleeDef and meleeDef:FindFirstChild("Model")
-		if not viewport or not model then
-			return
-		end
-		viewport:ClearAllChildren()
-		local clone = model:Clone()
-		clone.Parent = viewport
-		local camera = Instance.new("Camera")
-		camera.Parent = viewport
-		viewport.CurrentCamera = camera
-		local pivot = clone:GetPivot()
-		local size = clone:GetExtentsSize()
-		local dist = math.max(size.X, size.Y, size.Z) * 1.35
-		camera.CFrame = pivot * CFrame.new(0, 0, dist) * CFrame.Angles(0, math.pi, 0)
-		camera.FieldOfView = 24
 	end
 
 	local function removeFakeSlots(scroll)
@@ -88,79 +60,102 @@ function FakeMelee.create(ctx)
 	end
 
 	local function inject()
+		if injecting then
+			return false
+		end
+		if tick() - lastInject < INJECT_COOLDOWN then
+			return false
+		end
 		if game.PlaceId ~= ARSENAL_PLACE_ID then
 			return false
 		end
-		if not ctx.flags.flagOn("FakeMeleeEnabled", true) then
+		if not ctx.flags.flagOn("FakeMeleeEnabled", false) then
 			return false
 		end
+
 		local scroll = getLockerScroll()
 		if not scroll then
 			return false
 		end
+
 		local name = meleeName()
-		if scroll:FindFirstChild(name) and scroll:FindFirstChild(name):GetAttribute(FAKE_ATTR) then
-			return true
+		local existing = scroll:FindFirstChild(name)
+		if existing then
+			return existing:GetAttribute(FAKE_ATTR) == true
 		end
-		if scroll:FindFirstChild(name) and not scroll:FindFirstChild(name):GetAttribute(FAKE_ATTR) then
-			return false
-		end
+
 		local template = findTemplate(scroll)
 		if not template then
 			return false
 		end
-		local slot = template:Clone()
-		slot.Name = name
-		slot:SetAttribute(FAKE_ATTR, true)
-		setLabel(slot, name)
-		hideCountBadges(slot)
-		setupViewport(slot, name)
-		slot.Parent = scroll
-		table.insert(
-			connections,
+
+		injecting = true
+		local ok, result = pcall(function()
+			local slot = template:Clone()
+			slot.Name = name
+			slot:SetAttribute(FAKE_ATTR, true)
+			setLabel(slot, name)
+			slot.Parent = scroll
 			slot.MouseButton1Click:Connect(function()
-				local dataMelee = lp:FindFirstChild("Data") and lp.Data:FindFirstChild("Melee")
-				if dataMelee and dataMelee:IsA("StringValue") then
-					dataMelee.Value = name
-				end
-				local menew = lp.PlayerGui:FindFirstChild("Menew")
-				local locker = menew and menew:FindFirstChild("Locker")
-				local slots = locker and locker:FindFirstChild("Slots")
-				local slotsMelee = slots and slots:FindFirstChild("Melees")
-				if slotsMelee then
-					local tip = slotsMelee:FindFirstChild("ToolTip")
-					if tip and tip:IsA("StringValue") then
-						tip.Value = name
+				pcall(function()
+					local dataMelee = lp:FindFirstChild("Data") and lp.Data:FindFirstChild("Melee")
+					if dataMelee and dataMelee:IsA("StringValue") then
+						dataMelee.Value = name
 					end
-				end
+					local menew = lp.PlayerGui:FindFirstChild("Menew")
+					local locker = menew and menew:FindFirstChild("Locker")
+					local slots = locker and locker:FindFirstChild("Slots")
+					local slotsMelee = slots and slots:FindFirstChild("Melees")
+					if slotsMelee then
+						local tip = slotsMelee:FindFirstChild("ToolTip")
+						if tip and tip:IsA("StringValue") then
+							tip.Value = name
+						end
+					end
+				end)
 			end)
-		)
-		return true
+			return true
+		end)
+		injecting = false
+		lastInject = tick()
+		return ok and result == true
 	end
 
 	local function clear()
 		removeFakeSlots(getLockerScroll())
+		lastInject = 0
+	end
+
+	local function bindScrollWatch(scroll)
+		if scrollWatchBound or not scroll then
+			return
+		end
+		scrollWatchBound = true
+		table.insert(
+			connections,
+			scroll.ChildRemoved:Connect(function(child)
+				if child:GetAttribute(FAKE_ATTR) then
+					lastInject = 0
+					task.delay(INJECT_COOLDOWN, function()
+						if ctx.flags.flagOn("FakeMeleeEnabled", false) then
+							inject()
+						end
+					end)
+				end
+			end)
+		)
 	end
 
 	local function watch()
-		local playerGui = lp:WaitForChild("PlayerGui", 10)
-		if not playerGui then
-			return
-		end
-		table.insert(
-			connections,
-			playerGui.DescendantAdded:Connect(function()
-				task.defer(function()
-					if ctx.flags.flagOn("FakeMeleeEnabled", true) then
+		task.spawn(function()
+			for _ = 1, 20 do
+				local scroll = getLockerScroll()
+				if scroll then
+					bindScrollWatch(scroll)
+					if ctx.flags.flagOn("FakeMeleeEnabled", false) then
 						inject()
 					end
-				end)
-			end)
-		)
-		task.spawn(function()
-			for _ = 1, 30 do
-				if inject() then
-					break
+					return
 				end
 				task.wait(1)
 			end
@@ -174,6 +169,7 @@ function FakeMelee.create(ctx)
 		clear = clear,
 		unload = function()
 			clear()
+			scrollWatchBound = false
 			for _, conn in ipairs(connections) do
 				pcall(function()
 					conn:Disconnect()
