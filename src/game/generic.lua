@@ -94,17 +94,7 @@ function Game.create(ctx)
 		if not player or player == lp then
 			return true
 		end
-		local mode = ctx.flags.flagVal("TeamCheckMode", "Off")
-		if mode == "Off" or mode == "None" then
-			return false
-		end
-		if mode == "Roblox Team" then
-			return lp.Team ~= nil and player.Team == lp.Team
-		end
-		if mode == "Friends" then
-			return lp:IsFriendsWith(player.UserId)
-		end
-		return false
+		return lp.Team ~= nil and player.Team == lp.Team
 	end
 
 	local function isPlayerDead(plr, hum)

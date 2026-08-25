@@ -35,6 +35,21 @@ function Esp.create(ctx)
 		local maxDist = tonumber(ctx.flags.flagVal("ESPMaxDistance", ctx.config.DEFAULTS.ESPMaxDistance))
 			or ctx.config.DEFAULTS.ESPMaxDistance
 		for _, t in ipairs(targetList) do
+			local pack = draw.getPack(t.key)
+			if t.player and ctx.flags.flagOn("ESPTeamCheck") and ctx.game.isTeammate(t.player) then
+				draw.hidePack(pack)
+				if ctx.highlights[t.key] then
+					ctx.highlights[t.key].Enabled = false
+				end
+				continue
+			end
+			if not ctx.targets.shouldShowEsp(t) then
+				draw.hidePack(pack)
+				if ctx.highlights[t.key] then
+					ctx.highlights[t.key].Enabled = false
+				end
+				continue
+			end
 			seen[t.key] = true
 			local show = true
 			if t.player and not ctx.flags.flagOn("ShowPlayers") then
@@ -43,10 +58,6 @@ function Esp.create(ctx)
 			if t.isBot and not ctx.flags.flagOn("ShowNPCs") then
 				show = false
 			end
-			if show and not ctx.targets.shouldShowEsp(t) then
-				show = false
-			end
-			local pack = draw.getPack(t.key)
 			local color = ctx.targets.getColor(t)
 			local boxThickness = tonumber(ctx.flags.flagVal("ESPBoxThickness", ctx.config.DEFAULTS.ESPBoxThickness))
 				or ctx.config.DEFAULTS.ESPBoxThickness

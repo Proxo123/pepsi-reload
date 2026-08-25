@@ -270,9 +270,6 @@ function Targets.create(ctx)
 	end
 
 	local function shouldShowEsp(t)
-		if t.player and ctx.flags.flagOn("ESPTeamCheck") and gameApi.isTeammate(t.player) then
-			return false
-		end
 		if not refreshTarget(t) then
 			return false
 		end

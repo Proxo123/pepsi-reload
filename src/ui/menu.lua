@@ -12,7 +12,6 @@ function Menu.create(ctx)
 
 	local aimTab = window:CreateTab({ Name = "Aimbot" })
 	local espTab = window:CreateTab({ Name = "ESP" })
-	local targetTab = window:CreateTab({ Name = "Targeting" })
 	local colorTab = window:CreateTab({ Name = "Colors" })
 	local settingsTab = window:CreateTab({ Name = "Settings" })
 
@@ -21,9 +20,6 @@ function Menu.create(ctx)
 
 	local espMain = espTab:CreateSection({ Name = "ESP", Side = "Left" })
 	local espSet = espTab:CreateSection({ Name = "Display", Side = "Right" })
-
-	local targetMain = targetTab:CreateSection({ Name = "Targets", Side = "Left" })
-	local targetSet = targetTab:CreateSection({ Name = "Game Setup", Side = "Right" })
 
 	local colSec = colorTab:CreateSection({ Name = "Colors", Side = "Left" })
 	local configSec = settingsTab:CreateSection({ Name = "Configs", Side = "Left" })
@@ -111,60 +107,6 @@ function Menu.create(ctx)
 		Flag = "ESPTracerOrigin",
 		Value = "Bottom",
 		List = { "Bottom", "Center", "Top", "Mouse" },
-	})
-
-	targetMain:AddDropdown({
-		Name = "Team Check Mode",
-		Flag = "TeamCheckMode",
-		Value = "Off",
-		List = { "Off", "Roblox Team", "Friends" },
-	})
-	targetMain:AddSlider({
-		Name = "Target Refresh (Hz)",
-		Flag = "TargetRefreshHz",
-		Value = defaults.TargetRefreshHz,
-		Min = 5,
-		Max = 60,
-		Textbox = true,
-	})
-
-	targetSet:AddToggle({ Name = "Use Workspace Models", Flag = "UseWorkspaceModels", Value = true })
-	targetSet:AddToggle({ Name = "Filter Lobby Spawn", Flag = "FilterLobbySpawn", Value = false })
-	targetSet:AddSlider({
-		Name = "Lobby Min Y",
-		Flag = "LobbyMinY",
-		Value = defaults.LobbyMinY,
-		Min = 0,
-		Max = 500,
-		Textbox = true,
-	})
-	targetSet:AddSlider({
-		Name = "Dead Drop Threshold",
-		Flag = "DeadDropThreshold",
-		Value = defaults.DeadDropThreshold,
-		Min = 10,
-		Max = 200,
-		Textbox = true,
-	})
-	targetSet:AddSlider({
-		Name = "Max Part Separation",
-		Flag = "MaxPartSeparation",
-		Value = defaults.MaxPartSeparation,
-		Min = 4,
-		Max = 30,
-		Textbox = true,
-	})
-	targetSet:AddTextbox({
-		Name = "NPC Folders",
-		Flag = "NPCFolders",
-		Value = "",
-		Placeholder = "Bots, NPCs, Enemies",
-	})
-	targetSet:AddTextbox({
-		Name = "Ray Ignore Folder",
-		Flag = "RayIgnoreFolder",
-		Value = "Ignore",
-		Placeholder = "Ignore",
 	})
 
 	colSec:AddColorpicker({ Name = "Players", Flag = "PlayerColor", Value = Color3.fromRGB(255, 70, 70) })
