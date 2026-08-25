@@ -6,6 +6,9 @@ function Aim.create(ctx)
 	local targetsApi = ctx.targets
 
 	local function holdRequired()
+		if not ctx.flags or type(ctx.flags.flagVal) ~= "function" then
+			return false
+		end
 		local mode = ctx.flags.flagVal("AimMode", "Mouse2 Held")
 		if mode == "Always" then
 			return true
@@ -85,7 +88,7 @@ function Aim.create(ctx)
 		if not ctx.flags.flagOn("SilentAim") then
 			return
 		end
-		if UIS:GetFocusedTextBox() then
+		if UIS and UIS.GetFocusedTextBox and UIS:GetFocusedTextBox() then
 			return
 		end
 		if isrbxactive and not isrbxactive() then
@@ -124,7 +127,7 @@ function Aim.create(ctx)
 			state.lockedTargetKey = nil
 			return
 		end
-		if UIS:GetFocusedTextBox() then
+		if UIS and UIS.GetFocusedTextBox and UIS:GetFocusedTextBox() then
 			return
 		end
 		if isrbxactive and not isrbxactive() then

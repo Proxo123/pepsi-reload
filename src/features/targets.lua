@@ -195,11 +195,11 @@ function Targets.create(ctx)
 
 	local function rebuildTargets()
 		local list = {}
-		if not (ctx.flags.flagOn("ESPEnabled") or ctx.flags.flagOn("AimEnabled")) then
+		if not (ctx.flags.flagOn("ESPEnabled") or ctx.flags.flagOn("AimEnabled") or ctx.flags.flagOn("SilentAim")) then
 			return list
 		end
 		local seenPlayers = {}
-		local wantPlayers = ctx.flags.flagOn("ShowPlayers") or ctx.flags.flagOn("AimEnabled")
+		local wantPlayers = ctx.flags.flagOn("ShowPlayers") or ctx.flags.flagOn("AimEnabled") or ctx.flags.flagOn("SilentAim")
 		if wantPlayers then
 			for _, plr in Players:GetPlayers() do
 				if plr ~= lp then
@@ -257,10 +257,10 @@ function Targets.create(ctx)
 		if t.player and ctx.flags.teamCheckOn("aim") and gameApi.isTeammate(t.player) then
 			return false
 		end
-		if t.player and not ctx.flags.flagOn("ShowPlayers") and not ctx.flags.flagOn("AimEnabled") then
+		if t.player and not ctx.flags.flagOn("ShowPlayers") and not ctx.flags.flagOn("AimEnabled") and not ctx.flags.flagOn("SilentAim") then
 			return false
 		end
-		if t.isBot and not ctx.flags.flagOn("ShowNPCs") and not ctx.flags.flagOn("AimEnabled") then
+		if t.isBot and not ctx.flags.flagOn("ShowNPCs") and not ctx.flags.flagOn("AimEnabled") and not ctx.flags.flagOn("SilentAim") then
 			return false
 		end
 		if t.player and gameApi.isPlayerDead(t.player, t.hum) then
