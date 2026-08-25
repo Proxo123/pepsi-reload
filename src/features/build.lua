@@ -18,9 +18,23 @@ function Build.create(ctx)
 	local lp = ctx.lp
 	local gameApi = ctx.game
 
-	local BuildingAssets = RS:WaitForChild("BuildingAssets")
-	local HttpService = game:GetService("HttpService")
-	local placeRemote = BuildingAssets:WaitForChild("PlaceBuild")
+	local buildingAssets
+	local placeRemote
+
+	local function getBuildingAssets()
+		if buildingAssets == nil then
+			buildingAssets = RS:FindFirstChild("BuildingAssets")
+		end
+		return buildingAssets
+	end
+
+	local function getPlaceRemote()
+		if placeRemote == nil then
+			local assets = getBuildingAssets()
+			placeRemote = assets and assets:FindFirstChild("PlaceBuild") or false
+		end
+		return placeRemote ~= false and placeRemote or nil
+	end
 
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -135,7 +149,11 @@ function Build.create(ctx)
 	end
 
 	local function defaultVariant(buildType)
-		local template = BuildingAssets:FindFirstChild(buildType)
+		local assets = getBuildingAssets()
+		if not assets then
+			return "Default"
+		end
+		local template = assets:FindFirstChild(buildType)
 		if not template then
 			return "Default"
 		end
@@ -177,7 +195,13 @@ function Build.create(ctx)
 	end
 
 	local function placePiece(buildType, worldCFrame)
-		local template = BuildingAssets:FindFirstChild(buildType)
+		local assets = getBuildingAssets()
+		local remote = getPlaceRemote()
+		if not assets or not remote then
+			return false
+		end
+
+		local template = assets:FindFirstChild(buildType)
 		if not template or not template:FindFirstChild("Builds") then
 			return false
 		end
@@ -195,7 +219,7 @@ function Build.create(ctx)
 		preparePreview(preview, buildType, worldCFrame, guid, variant)
 
 		local ok, ret1 = pcall(function()
-			return placeRemote:InvokeServer(
+			return remote:InvokeServer(
 				buildType,
 				worldCFrame,
 				variant,
@@ -301,7 +325,7 @@ function Build.create(ctx)
 			4,
 			24
 		)
-		if wood < wallCount * 5 and RS.GameInfo.InfMats.Value == false then
+		if wood < wallCount * 5 and RS:FindFirstChild("GameInfo") and RS.GameInfo:FindFirstChild("InfMats") and RS.GameInfo.InfMats.Value == false then
 			notify("Low wood (" .. wood .. ") — need ~" .. wallCount * 5, 4)
 		end
 
