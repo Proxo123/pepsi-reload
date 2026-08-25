@@ -1,8 +1,8 @@
 -- Update REPO after pushing to GitHub (raw.githubusercontent.com user/repo/branch/)
 return {
-	VERSION = "v56-generic",
+	VERSION = "v57-generic",
 	REPO = "https://raw.githubusercontent.com/Proxo123/pepsi-reload/main/",
-	AIM_STEP = "PepsiHubAim_v56",
+	AIM_STEP = "PepsiHubAim_v57",
 	LIBRARY_ID = "rbxassetid://7657867786",
 	CONFIG_WORKSPACE = "PepsiHub",
 	DEFAULT_CONFIG = "default",

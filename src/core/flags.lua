@@ -3,7 +3,16 @@ local Flags = {}
 function Flags.make(libraryFlags, defaults, library)
 	local toggleCache = {}
 	local toggleCacheTime = 0
-	local TOGGLE_CACHE_TTL = 0.05
+	local TOGGLE_CACHE_TTL = 0.1
+
+	local function readToggle(toggle, flagName)
+		if type(toggle) ~= "table" or not toggle.Options then
+			return
+		end
+		if toggle.Options.Value ~= nil then
+			toggleCache[flagName] = toggle.Options.Value
+		end
+	end
 
 	local function refreshToggleCache()
 		local now = tick()
@@ -15,23 +24,32 @@ function Flags.make(libraryFlags, defaults, library)
 		if not library then
 			return
 		end
-		local function walk(node, depth)
-			if depth > 16 or type(node) ~= "table" then
-				return
+
+		if type(library.flags) == "table" then
+			for flagName, value in pairs(library.flags) do
+				if type(value) == "table" then
+					readToggle(value, flagName)
+				elseif value ~= nil then
+					toggleCache[flagName] = value
+				end
 			end
-			local flags = node.Flags
-			if type(flags) == "table" then
-				for flagName, toggle in pairs(flags) do
-					if type(toggle) == "table" and toggle.Options and toggle.Options.Value ~= nil then
-						toggleCache[flagName] = toggle.Options.Value
+		end
+
+		if type(library.objects) == "table" then
+			for _, obj in ipairs(library.objects) do
+				if type(obj) == "table" then
+					local flagName = obj.Flag or (obj.Options and obj.Options.Flag)
+					if type(flagName) == "string" then
+						readToggle(obj, flagName)
+					end
+					if type(obj.Flags) == "table" then
+						for name, toggle in pairs(obj.Flags) do
+							readToggle(toggle, name)
+						end
 					end
 				end
 			end
-			for _, child in pairs(node) do
-				walk(child, depth + 1)
-			end
 		end
-		walk(library, 0)
 	end
 
 	local function resolveFlag(name)
@@ -82,6 +100,7 @@ function Flags.make(libraryFlags, defaults, library)
 		flagOn = flagOn,
 		teamCheckOn = teamCheckOn,
 		defaults = defaults,
+		refresh = refreshToggleCache,
 	}
 end
 

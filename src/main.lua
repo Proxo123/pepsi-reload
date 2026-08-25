@@ -73,6 +73,7 @@ function Main.start(import)
 	ctx.esp = EspMod.create(ctx)
 	ctx.fakeMelee = FakeMeleeMod.create(ctx)
 	ctx.menu = MenuMod.create(ctx)
+	ctx.flags.refresh()
 
 	local fovCircle = ctx.draw.drawing("Circle", { Filled = false, Thickness = 1, NumSides = 48, ZIndex = 4 })
 	local logicAccum = 0
