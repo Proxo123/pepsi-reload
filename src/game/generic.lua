@@ -26,7 +26,16 @@ function Game.create(ctx)
 	end
 
 	local function findWorkspacePlayerModel(name)
-		if not name or not ctx.flags.flagOn("UseWorkspaceModels") then
+		if not name then
+			return nil
+		end
+		if game.PlaceId == 286090429 then
+			local direct = workspace:FindFirstChild(name)
+			if direct and direct:IsA("Model") and direct:FindFirstChildOfClass("Humanoid") then
+				return direct
+			end
+		end
+		if not ctx.flags.flagOn("UseWorkspaceModels") then
 			return nil
 		end
 		refreshWorkspaceCache()

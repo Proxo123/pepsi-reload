@@ -1,8 +1,8 @@
 -- Update REPO after pushing to GitHub (raw.githubusercontent.com user/repo/branch/)
 return {
-	VERSION = "v60-generic",
+	VERSION = "v61-generic",
 	REPO = "https://raw.githubusercontent.com/Proxo123/pepsi-reload/main/",
-	AIM_STEP = "PepsiHubAim_v60",
+	AIM_STEP = "PepsiHubAim_v61",
 	LIBRARY_ID = "rbxassetid://7657867786",
 	CONFIG_WORKSPACE = "PepsiHub",
 	DEFAULT_CONFIG = "default",
@@ -19,5 +19,6 @@ return {
 		ESPTextSize = 13,
 		ESPBoxThickness = 1,
 		TargetRefreshHz = 30,
+		RayIgnoreFolder = "Ray_Ignore",
 	},
 }

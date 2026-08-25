@@ -19,10 +19,16 @@ function Aim.create(ctx)
 		if type(UIS.IsMouseButtonPressed) ~= "function" then
 			return false
 		end
-		if mode == "Mouse1 Held" then
-			return UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+		local function pressed(inputType)
+			local ok, result = pcall(function()
+				return UIS:IsMouseButtonPressed(inputType)
+			end)
+			return ok and result == true
 		end
-		return UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+		if mode == "Mouse1 Held" then
+			return pressed(Enum.UserInputType.MouseButton1)
+		end
+		return pressed(Enum.UserInputType.MouseButton2)
 	end
 
 	local function partAlive(part)
@@ -183,6 +189,9 @@ function Aim.create(ctx)
 	end
 
 	local function applyAim()
+		if not ctx.flags or type(ctx.flags.flagOn) ~= "function" then
+			return
+		end
 		if not ctx.flags.flagOn("AimEnabled") or not holdRequired() then
 			return
 		end
