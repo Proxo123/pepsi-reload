@@ -10,7 +10,10 @@ function Aim.create(ctx)
 		if mode == "Always" then
 			return true
 		end
-		if not UIS or type(UIS.IsMouseButtonPressed) ~= "function" then
+		if not UIS then
+			return false
+		end
+		if type(UIS.IsMouseButtonPressed) ~= "function" then
 			return false
 		end
 		if mode == "Mouse1 Held" then

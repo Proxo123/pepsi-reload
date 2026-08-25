@@ -3,22 +3,27 @@ local Silent = {}
 local ARSENAL_PLACE_ID = 286090429
 
 function Silent.create(ctx)
-	local RS = game:GetService("ReplicatedStorage")
 	local state = ctx.state
-	local hitRemote = RS:FindFirstChild("HitPart")
 
-	local function active()
-		return game.PlaceId == ARSENAL_PLACE_ID
-			and ctx.flags.flagOn("SilentAim")
-			and hitRemote ~= nil
-			and hookmetamethod ~= nil
+	local function fromCaller()
+		return checkcaller and checkcaller()
 	end
 
 	local function getTargetPart()
 		local part = state.silentTargetPart
-		if part and part.Parent then
-			return part
+		if not part or not part.Parent then
+			return nil
 		end
+		if game.PlaceId == ARSENAL_PLACE_ID then
+			local char = part:FindFirstAncestorOfClass("Model")
+			if char then
+				local hitbox = char:FindFirstChild("Hitbox")
+				if hitbox then
+					return hitbox
+				end
+			end
+		end
+		return part
 	end
 
 	local function rayStateFor(part)
@@ -42,90 +47,123 @@ function Silent.create(ctx)
 		return out
 	end
 
-	local function rewriteHitArgs(args, part, pos)
-		local newArgs = copyArgs(args)
-		local replacedPart = false
-		local replacedPos = false
-		for i, a in ipairs(newArgs) do
-			if not replacedPart and typeof(a) == "Instance" and a:IsA("BasePart") then
-				newArgs[i] = part
-				replacedPart = true
-			elseif not replacedPos and typeof(a) == "Vector3" then
-				newArgs[i] = pos
-				replacedPos = true
+	local function handleArsenalRemote(self, method, args)
+		local name = tostring(self)
+		local targetPart = getTargetPart()
+		if not targetPart then
+			return false
+		end
+		local pos = targetPart.Position
+
+		if name == "HitPart" and method == "FireServer" then
+			args[1] = targetPart
+			return true
+		end
+		if name == "Fire" and method == "FireServer" then
+			args[1] = pos
+			return true
+		end
+		if name == "Flames" and method == "FireServer" then
+			args[1] = targetPart.CFrame
+			args[2] = pos
+			args[5] = pos
+			return true
+		end
+		if name == "ReplicateProjectile" and method == "FireServer" then
+			if type(args[1]) == "table" then
+				args[1][3] = pos
+				args[1][4] = pos
+				args[1][10] = pos
 			end
+			return true
 		end
-		if not replacedPart then
-			table.insert(newArgs, 1, part)
+		if name == "CreateProjectile" and method == "FireServer" then
+			args[3] = pos
+			args[4] = targetPart.CFrame
+			args[10] = pos
+			args[17] = pos
+			args[18] = targetPart
+			args[19] = pos
+			return true
 		end
-		if not replacedPos then
-			table.insert(newArgs, 2, pos)
+		if name == "Trail" and method == "FireServer" then
+			if type(args[1]) == "table" and type(args[1][5]) == "string" then
+				args[1][2] = pos
+				args[1][6] = targetPart
+			end
+			return true
 		end
-		return newArgs
+		return false
 	end
 
-	local function redirectRay(method, args, rayState)
-		if method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRay" then
-			return rayState.part, rayState.pos, rayState.normal
-		end
-		if method == "Raycast" then
-			local origin = args[1]
-			local direction = args[2]
-			if typeof(origin) ~= "Vector3" then
-				origin = args[2]
-				direction = args[3]
-			end
-			if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" and direction.Magnitude > 0.01 then
-				local hitDist = (rayState.pos - origin).Magnitude
-				if hitDist <= direction.Magnitude then
-					return {
-						Instance = rayState.part,
-						Position = rayState.pos,
-						Normal = rayState.normal,
-						Material = Enum.Material.Plastic,
-						Distance = hitDist,
-					}
-				end
-			end
-		end
-	end
-
-	local function installHook()
-		if state.silentNamecallRestore or not hookmetamethod or not hitRemote then
+	local function installHooks()
+		if state.silentNamecallRestore or not hookmetamethod then
 			return
 		end
+
 		local oldNamecall
 		oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+			if fromCaller() or not state.silentAimActive then
+				return oldNamecall(self, ...)
+			end
+
 			local method = getnamecallmethod()
-			if active() then
-				local targetPart = getTargetPart()
-				if targetPart then
-					if self == hitRemote and method == "FireServer" then
-						local rayState = rayStateFor(targetPart)
-						state.silentRayState = rayState
-						local newArgs = rewriteHitArgs({ ... }, targetPart, rayState.pos)
-						local results = { oldNamecall(self, table.unpack(newArgs)) }
-						state.silentRayState = nil
-						return table.unpack(results)
-					end
-					if state.silentRayState and self == workspace then
-						local redirected = redirectRay(method, { ... }, state.silentRayState)
-						if redirected ~= nil then
-							return redirected
+			local args = { ... }
+			local targetPart = getTargetPart()
+
+			if targetPart and self == workspace then
+				local rayState = rayStateFor(targetPart)
+				if method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRay" or method == "findPartOnRay" then
+					local ray = args[1]
+					if typeof(ray) == "Ray" then
+						local origin = ray.Origin
+						local dist = ray.Direction.Magnitude
+						if dist > 0.01 then
+							args[1] = Ray.new(origin, (rayState.pos - origin).Unit * dist)
+							return oldNamecall(self, table.unpack(args))
 						end
+					end
+					return rayState.part, rayState.pos, rayState.normal
+				end
+				if method == "Raycast" then
+					local origin = args[1]
+					local direction = args[2]
+					local params = args[3]
+					if typeof(origin) ~= "Vector3" then
+						origin = args[2]
+						direction = args[3]
+						params = args[4]
+					end
+					if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" and direction.Magnitude > 0.01 then
+						local newDir = (rayState.pos - origin).Unit * direction.Magnitude
+						if typeof(args[1]) == "Vector3" then
+							return oldNamecall(self, origin, newDir, params)
+						end
+						return oldNamecall(self, args[1], origin, newDir, params)
 					end
 				end
 			end
+
+			if targetPart and method == "FireServer" then
+				local remoteArgs = copyArgs(args)
+				if handleArsenalRemote(self, method, remoteArgs) then
+					return oldNamecall(self, table.unpack(remoteArgs))
+				end
+			end
+
 			return oldNamecall(self, ...)
 		end))
+
 		state.silentNamecallRestore = oldNamecall
 	end
 
 	local function refresh()
-		state.silentAimActive = active()
+		state.silentAimActive = game.PlaceId == ARSENAL_PLACE_ID
+			and ctx.flags.flagOn("SilentAim")
+			and hookmetamethod ~= nil
 	end
 
-	installHook()
+	installHooks()
 
 	return {
 		refresh = refresh,
