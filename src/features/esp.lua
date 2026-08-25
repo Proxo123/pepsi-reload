@@ -36,7 +36,7 @@ function Esp.create(ctx)
 			or ctx.config.DEFAULTS.ESPMaxDistance
 		for _, t in ipairs(targetList) do
 			local pack = draw.getPack(t.key)
-			if t.player and ctx.flags.flagOn("ESPTeamCheck") and ctx.game.isTeammate(t.player) then
+			if t.player and ctx.flags.teamCheckOn("esp") and ctx.game.isTeammate(t.player) then
 				draw.hidePack(pack)
 				if ctx.highlights[t.key] then
 					ctx.highlights[t.key].Enabled = false

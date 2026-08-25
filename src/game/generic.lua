@@ -94,7 +94,22 @@ function Game.create(ctx)
 		if not player or player == lp then
 			return true
 		end
-		return lp.Team ~= nil and player.Team == lp.Team
+		if lp.Team ~= nil and player.Team ~= nil and player.Team == lp.Team then
+			return true
+		end
+		if lp.TeamColor and player.TeamColor and lp.TeamColor ~= BrickColor.new("White") and lp.TeamColor == player.TeamColor then
+			return true
+		end
+		local myModel = workspace:FindFirstChild(lp.Name)
+		local theirModel = workspace:FindFirstChild(player.Name)
+		if myModel and theirModel then
+			local myTeamColor = myModel:GetAttribute("TeamColor")
+			local theirTeamColor = theirModel:GetAttribute("TeamColor")
+			if myTeamColor and theirTeamColor and myTeamColor == theirTeamColor then
+				return true
+			end
+		end
+		return false
 	end
 
 	local function isPlayerDead(plr, hum)

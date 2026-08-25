@@ -254,7 +254,7 @@ function Targets.create(ctx)
 		if not refreshTarget(t) then
 			return false
 		end
-		if t.player and ctx.flags.flagOn("AimTeamCheck") and gameApi.isTeammate(t.player) then
+		if t.player and ctx.flags.teamCheckOn("aim") and gameApi.isTeammate(t.player) then
 			return false
 		end
 		if t.player and not ctx.flags.flagOn("ShowPlayers") and not ctx.flags.flagOn("AimEnabled") then

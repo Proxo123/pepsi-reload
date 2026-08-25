@@ -64,7 +64,7 @@ function Main.start(import)
 		},
 	}
 
-	ctx.flags = FlagsMod.make(library.flags, Config.DEFAULTS)
+	ctx.flags = FlagsMod.make(library.flags, Config.DEFAULTS, library)
 	ctx.game = GameMod.create(ctx)
 	ctx.draw = DrawingMod.create(ctx)
 	ctx.targets = TargetsMod.create(ctx)
