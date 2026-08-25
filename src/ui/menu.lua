@@ -23,6 +23,7 @@ function Menu.create(ctx)
 
 	local colSec = colorTab:CreateSection({ Name = "Colors", Side = "Left" })
 	local configSec = settingsTab:CreateSection({ Name = "Configs", Side = "Left" })
+	local miscSec = settingsTab:CreateSection({ Name = "Arsenal", Side = "Right" })
 	local autoloadSec = settingsTab:CreateSection({ Name = "Autoload", Side = "Right" })
 
 	aimMain:AddToggle({ Name = "Enabled", Flag = "AimEnabled", Value = false })
@@ -107,6 +108,22 @@ function Menu.create(ctx)
 		Flag = "ESPTracerOrigin",
 		Value = "Bottom",
 		List = { "Bottom", "Center", "Top", "Mouse" },
+	})
+
+	miscSec:AddToggle({
+		Name = "Fake Saber In Melee Locker",
+		Flag = "FakeMeleeEnabled",
+		Value = true,
+		Callback = function(enabled)
+			if not ctx.fakeMelee then
+				return
+			end
+			if enabled then
+				ctx.fakeMelee.inject()
+			else
+				ctx.fakeMelee.clear()
+			end
+		end,
 	})
 
 	colSec:AddColorpicker({ Name = "Players", Flag = "PlayerColor", Value = Color3.fromRGB(255, 70, 70) })

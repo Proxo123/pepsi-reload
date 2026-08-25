@@ -8,6 +8,7 @@ function Main.start(import)
 	local TargetsMod = import("src/features/targets")
 	local AimMod = import("src/features/aim")
 	local EspMod = import("src/features/esp")
+	local FakeMeleeMod = import("src/features/fake_melee")
 	local MenuMod = import("src/ui/menu")
 	local ConfigStoreMod = import("src/core/config_store")
 
@@ -70,6 +71,7 @@ function Main.start(import)
 	ctx.targets = TargetsMod.create(ctx)
 	ctx.aim = AimMod.create(ctx)
 	ctx.esp = EspMod.create(ctx)
+	ctx.fakeMelee = FakeMeleeMod.create(ctx)
 	ctx.menu = MenuMod.create(ctx)
 
 	local fovCircle = ctx.draw.drawing("Circle", { Filled = false, Thickness = 1, NumSides = 48, ZIndex = 4 })
@@ -161,6 +163,9 @@ function Main.start(import)
 			ctx.draw.clearKey(k)
 		end
 		ctx.draw.destroyDrawing(fovCircle)
+		if ctx.fakeMelee and ctx.fakeMelee.unload then
+			ctx.fakeMelee.unload()
+		end
 		pcall(function()
 			library.unload()
 		end)
