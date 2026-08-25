@@ -3,6 +3,7 @@ local Menu = {}
 function Menu.create(ctx)
 	local defaults = ctx.config.DEFAULTS
 	local version = ctx.config.VERSION
+	local ConfigStore = ctx.configStore
 
 	local window = ctx.library:CreateWindow({
 		Name = "Pepsi Reload",
@@ -158,11 +159,66 @@ function Menu.create(ctx)
 	colSec:AddColorpicker({ Name = "FOV Circle", Flag = "AimFOVColor", Value = Color3.fromRGB(255, 255, 255) })
 	colSec:AddColorpicker({ Name = "Silent Tracer", Flag = "SilentTracerColor", Value = Color3.fromRGB(255, 80, 255) })
 
+	local settingsTab = window:CreateTab({ Name = "Settings" })
+	local configSec = settingsTab:CreateSection({ Name = "Configs", Side = "Left" })
+	local autoloadSec = settingsTab:CreateSection({ Name = "Autoload", Side = "Right" })
+
+	local workspaceName = ctx.config.CONFIG_WORKSPACE
+	local defaultProfile = ctx.config.DEFAULT_CONFIG
+	local autoloadProfile = ConfigStore.getAutoload(workspaceName)
+
+	local persistence = configSec:AddPersistence({
+		Name = "Config Name",
+		Flag = "ConfigProfile",
+		Workspace = workspaceName,
+		Suffix = "Config",
+		Flags = true,
+		Value = autoloadProfile or defaultProfile,
+	})
+
+	autoloadSec:AddToggle({
+		Name = "Autoload On Startup",
+		Flag = "ConfigAutoloadEnabled",
+		Value = autoloadProfile ~= nil,
+		Callback = function(enabled)
+			if enabled then
+				local profile = ConfigStore.profileName(ctx.library) or defaultProfile
+				if ConfigStore.setAutoload(workspaceName, profile) then
+					ctx.library:Notify({ Text = "Autoload set to: " .. profile, Time = 4 })
+				end
+			else
+				ConfigStore.clearAutoload(workspaceName)
+				ctx.library:Notify({ Text = "Autoload disabled.", Time = 3 })
+			end
+		end,
+	})
+
+	autoloadSec:AddButton({
+		Name = "Use Current As Autoload",
+		Callback = function()
+			local profile = ConfigStore.profileName(ctx.library) or defaultProfile
+			if ConfigStore.setAutoload(workspaceName, profile) then
+				local flag = ctx.library.flags.ConfigAutoloadEnabled
+				if type(flag) == "table" and flag.Set then
+					flag:Set(true)
+				end
+				ctx.library:Notify({ Text = "Autoload set to: " .. profile, Time = 4 })
+			end
+		end,
+	})
+
 	pcall(function()
 		window:CreateDesigner({ Credit = true, Info = "Reload " .. version })
 	end)
 
-	return window
+	task.defer(function()
+		ConfigStore.tryAutoload(persistence, ctx.config, ctx.library)
+	end)
+
+	return {
+		window = window,
+		persistence = persistence,
+	}
 end
 
 return Menu

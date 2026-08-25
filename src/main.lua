@@ -12,6 +12,7 @@ function Main.start(import)
 	local TracersMod = import("src/features/tracers")
 	local BuildMod = import("src/features/build")
 	local MenuMod = import("src/ui/menu")
+	local ConfigStoreMod = import("src/core/config_store")
 
 	local Players = game:GetService("Players")
 	local RS = game:GetService("ReplicatedStorage")
@@ -30,8 +31,10 @@ function Main.start(import)
 	end
 
 	local library = loadstring(game:GetObjects(Config.LIBRARY_ID)[1].Source)("Pepsi's UI Library")
+	library.WorkspaceName = Config.CONFIG_WORKSPACE
 	local ctx = {
 		config = Config,
+		configStore = ConfigStoreMod,
 		lp = lp,
 		library = library,
 		camera = workspace.CurrentCamera,
@@ -74,7 +77,7 @@ function Main.start(import)
 	ctx.esp = EspMod.create(ctx)
 	ctx.tracers = TracersMod.create(ctx)
 	ctx.build = BuildMod.create(ctx)
-	MenuMod.create(ctx)
+	ctx.menu = MenuMod.create(ctx)
 
 	local fovCircle = ctx.draw.drawing("Circle", { Filled = false, Thickness = 1, NumSides = 48, ZIndex = 4 })
 	local logicAccum = 0
