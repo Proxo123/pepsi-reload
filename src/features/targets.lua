@@ -61,13 +61,16 @@ function Targets.create(ctx)
 		end
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char.PrimaryPart
-		if not hum or hum.Health <= 0 or not root then
+		if not hum or not root then
+			return
+		end
+		local head = char:FindFirstChild("Head")
+		if not gameApi.isCharacterViable(hum, root, head) then
 			return
 		end
 		if not isNpc and gameApi.isLobbyPosition(root.Position) then
 			return
 		end
-		local head = char:FindFirstChild("Head")
 		local wsKnown = isNpc or char.Parent == workspace or wsModel == char
 		local split = (not isNpc and not wsKnown) or not head
 		if not split and head and root and (head.Position - root.Position).Magnitude > 3 then
@@ -224,8 +227,34 @@ function Targets.create(ctx)
 		cacheTime = 0
 	end
 
+	local function refreshTarget(t)
+		if not t or not t.character then
+			return false
+		end
+		local char = t.character
+		local hum = char:FindFirstChildOfClass("Humanoid") or t.hum
+		local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or t.root
+		local head = char:FindFirstChild("Head")
+		if not hum or not root then
+			return false
+		end
+		t.hum = hum
+		t.root = root
+		if t.player and gameApi.isPlayerDead(t.player, hum) then
+			return false
+		end
+		if not gameApi.isCharacterViable(hum, root, head) then
+			return false
+		end
+		t.aimPart = resolveAimPart(char, root, head, t.isBot, char.Parent == workspace)
+		return true
+	end
+
 	local function isValidAimTarget(t)
-		if t.player and ctx.flags.flagOn("TeamCheck") and gameApi.isTeammate(t.player) then
+		if not refreshTarget(t) then
+			return false
+		end
+		if t.player and ctx.flags.flagOn("AimTeamCheck") and gameApi.isTeammate(t.player) then
 			return false
 		end
 		if t.player and not ctx.flags.flagOn("ShowPlayers") and not ctx.flags.flagOn("AimEnabled") then
@@ -240,6 +269,16 @@ function Targets.create(ctx)
 		return true
 	end
 
+	local function shouldShowEsp(t)
+		if t.player and ctx.flags.flagOn("ESPTeamCheck") and gameApi.isTeammate(t.player) then
+			return false
+		end
+		if not refreshTarget(t) then
+			return false
+		end
+		return true
+	end
+
 	table.insert(ctx.connections or {}, Players.PlayerAdded:Connect(invalidateTargetCache))
 	table.insert(ctx.connections or {}, Players.PlayerRemoving:Connect(invalidateTargetCache))
 
@@ -249,6 +288,8 @@ function Targets.create(ctx)
 		collectTargets = collectTargets,
 		invalidateTargetCache = invalidateTargetCache,
 		isValidAimTarget = isValidAimTarget,
+		shouldShowEsp = shouldShowEsp,
+		refreshTarget = refreshTarget,
 	}
 end
 

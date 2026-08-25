@@ -2,6 +2,7 @@ local Esp = {}
 
 function Esp.create(ctx)
 	local draw = ctx.draw
+	local UIS = ctx.services.UIS
 
 	local function liveWorld(t)
 		local char = t.character
@@ -42,6 +43,9 @@ function Esp.create(ctx)
 			if t.isBot and not ctx.flags.flagOn("ShowNPCs") then
 				show = false
 			end
+			if show and not ctx.targets.shouldShowEsp(t) then
+				show = false
+			end
 			local pack = draw.getPack(t.key)
 			local color = ctx.targets.getColor(t)
 			local boxThickness = tonumber(ctx.flags.flagVal("ESPBoxThickness", ctx.config.DEFAULTS.ESPBoxThickness))
@@ -71,7 +75,9 @@ function Esp.create(ctx)
 				end
 				local tracerOrigin = ctx.flags.flagVal("ESPTracerOrigin", "Bottom")
 				local tracerFrom
-				if tracerOrigin == "Center" then
+				if tracerOrigin == "Mouse" and UIS then
+					tracerFrom = UIS:GetMouseLocation()
+				elseif tracerOrigin == "Center" then
 					tracerFrom = Vector2.new(center.X, center.Y)
 				elseif tracerOrigin == "Top" then
 					tracerFrom = Vector2.new(center.X, 0)

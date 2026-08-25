@@ -30,11 +30,10 @@ function Menu.create(ctx)
 	local autoloadSec = settingsTab:CreateSection({ Name = "Autoload", Side = "Right" })
 
 	aimMain:AddToggle({ Name = "Enabled", Flag = "AimEnabled", Value = false })
-	aimMain:AddToggle({ Name = "Team Check", Flag = "TeamCheck", Value = true })
+	aimMain:AddToggle({ Name = "Team Check", Flag = "AimTeamCheck", Value = false })
 	aimMain:AddToggle({ Name = "Wall Check", Flag = "AimWallCheck", Value = true })
 	aimMain:AddToggle({ Name = "Sticky Target", Flag = "AimSticky", Value = true })
 	aimMain:AddToggle({ Name = "Show FOV", Flag = "AimShowFOV", Value = true })
-	aimMain:AddToggle({ Name = "Prediction", Flag = "AimPrediction", Value = false })
 	aimMain:AddDropdown({
 		Name = "Activation",
 		Flag = "AimMode",
@@ -65,15 +64,6 @@ function Menu.create(ctx)
 	})
 	aimSet:AddSlider({ Name = "FOV", Flag = "AimFOV", Value = defaults.AimFOV, Min = 10, Max = 800, Textbox = true })
 	aimSet:AddSlider({ Name = "Range", Flag = "AimRange", Value = defaults.AimRange, Min = 50, Max = 5000, Textbox = true })
-	aimSet:AddSlider({
-		Name = "Prediction Lead",
-		Flag = "AimPredictionLead",
-		Value = defaults.AimPredictionLead,
-		Min = 0,
-		Max = 0.5,
-		Precise = 3,
-		Textbox = true,
-	})
 	aimSet:AddSlider({ Name = "FOV Thickness", Flag = "AimFOVThickness", Value = 1, Min = 1, Max = 4, Textbox = true })
 
 	espMain:AddToggle({
@@ -82,6 +72,7 @@ function Menu.create(ctx)
 		Value = false,
 		Keybind = { Value = Enum.KeyCode.U, Mode = "Toggle" },
 	})
+	espMain:AddToggle({ Name = "Team Check", Flag = "ESPTeamCheck", Value = false })
 	espMain:AddToggle({ Name = "Players", Flag = "ShowPlayers", Value = true })
 	espMain:AddToggle({ Name = "NPCs", Flag = "ShowNPCs", Value = false })
 	espMain:AddToggle({ Name = "Boxes", Flag = "ESPBoxes", Value = true })
@@ -119,7 +110,7 @@ function Menu.create(ctx)
 		Name = "Tracer Origin",
 		Flag = "ESPTracerOrigin",
 		Value = "Bottom",
-		List = { "Bottom", "Center", "Top" },
+		List = { "Bottom", "Center", "Top", "Mouse" },
 	})
 
 	targetMain:AddDropdown({
@@ -145,6 +136,22 @@ function Menu.create(ctx)
 		Value = defaults.LobbyMinY,
 		Min = 0,
 		Max = 500,
+		Textbox = true,
+	})
+	targetSet:AddSlider({
+		Name = "Dead Drop Threshold",
+		Flag = "DeadDropThreshold",
+		Value = defaults.DeadDropThreshold,
+		Min = 10,
+		Max = 200,
+		Textbox = true,
+	})
+	targetSet:AddSlider({
+		Name = "Max Part Separation",
+		Flag = "MaxPartSeparation",
+		Value = defaults.MaxPartSeparation,
+		Min = 4,
+		Max = 30,
 		Textbox = true,
 	})
 	targetSet:AddTextbox({

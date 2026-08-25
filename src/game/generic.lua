@@ -55,6 +55,41 @@ function Game.create(ctx)
 		return findWorkspacePlayerModel(char.Name) or char
 	end
 
+	local function getLocalRootY()
+		local char = lp.Character
+		local root = char and char:FindFirstChild("HumanoidRootPart")
+		return root and root.Position.Y
+	end
+
+	local function isCharacterViable(hum, root, head)
+		if not hum or not root then
+			return false
+		end
+		if hum.Health <= 0 then
+			return false
+		end
+		local state = hum:GetState()
+		if state == Enum.HumanoidStateType.Dead then
+			return false
+		end
+		local localY = getLocalRootY()
+		if localY then
+			local drop = tonumber(ctx.flags.flagVal("DeadDropThreshold", ctx.config.DEFAULTS.DeadDropThreshold))
+				or ctx.config.DEFAULTS.DeadDropThreshold
+			if root.Position.Y < localY - drop then
+				return false
+			end
+		end
+		if head then
+			local maxSep = tonumber(ctx.flags.flagVal("MaxPartSeparation", ctx.config.DEFAULTS.MaxPartSeparation))
+				or ctx.config.DEFAULTS.MaxPartSeparation
+			if (head.Position - root.Position).Magnitude > maxSep then
+				return false
+			end
+		end
+		return true
+	end
+
 	local function isTeammate(player)
 		if not player or player == lp then
 			return true
@@ -137,6 +172,7 @@ function Game.create(ctx)
 		pickBestModel = pickBestModel,
 		getNpcFolders = getNpcFolders,
 		getRayIgnoreFolderName = getRayIgnoreFolderName,
+		isCharacterViable = isCharacterViable,
 		invalidateCaches = function()
 			wsCacheTime = 0
 		end,

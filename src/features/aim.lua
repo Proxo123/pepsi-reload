@@ -20,30 +20,14 @@ function Aim.create(ctx)
 	end
 
 	local function partAlive(part)
-		return part and part.Position
-	end
-
-	local function getPredictedPos(part)
-		if not partAlive(part) then
-			return
-		end
-		if not ctx.flags.flagOn("AimPrediction") then
-			return part.Position
-		end
-		local lead = tonumber(ctx.flags.flagVal("AimPredictionLead", ctx.config.DEFAULTS.AimPredictionLead))
-			or ctx.config.DEFAULTS.AimPredictionLead
-		local vel = part.AssemblyLinearVelocity
-		if vel.Magnitude < 0.05 then
-			return part.Position
-		end
-		return part.Position + vel * lead
+		return part and part.Parent and part.Position
 	end
 
 	local function screenScore(part, origin, center, fov, range)
 		if not partAlive(part) then
 			return
 		end
-		local targetPos = getPredictedPos(part)
+		local targetPos = part.Position
 		local pos, onScreen = ctx.camera:WorldToViewportPoint(targetPos)
 		if not onScreen or pos.Z <= 0 then
 			return
@@ -64,8 +48,10 @@ function Aim.create(ctx)
 		if not ctx.flags.flagOn("AimWallCheck") then
 			return true
 		end
-		local targetPos = getPredictedPos(t.aimPart)
-		return targetsApi.visible(origin, targetPos, t.character, t.key)
+		if not partAlive(t.aimPart) then
+			return false
+		end
+		return targetsApi.visible(origin, t.aimPart.Position, t.character, t.key)
 	end
 
 	local function getAimTarget(targetList)
@@ -132,17 +118,26 @@ function Aim.create(ctx)
 		if not ctx.flags.flagOn("AimEnabled") or not holdRequired() then
 			return
 		end
-		if not state.aimTargetPart or not partAlive(state.aimTargetPart) then
+		local part = state.aimTargetPart
+		if not partAlive(part) then
+			state.aimTargetPart = nil
+			state.lockedTargetKey = nil
+			return
+		end
+		local char = part:FindFirstAncestorOfClass("Model")
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		local root = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso"))
+		local head = char and char:FindFirstChild("Head")
+		if not ctx.game.isCharacterViable(hum, root or part, head) then
+			state.aimTargetPart = nil
+			state.lockedTargetKey = nil
 			return
 		end
 		ctx.camera = workspace.CurrentCamera
 		if not ctx.camera then
 			return
 		end
-		local targetPos = getPredictedPos(state.aimTargetPart)
-		if not targetPos then
-			return
-		end
+		local targetPos = part.Position
 		local goal = CFrame.lookAt(ctx.camera.CFrame.Position, targetPos)
 		local strength = math.clamp(
 			tonumber(ctx.flags.flagVal("AimSmoothness", ctx.config.DEFAULTS.AimSmoothness)) or ctx.config.DEFAULTS.AimSmoothness,
