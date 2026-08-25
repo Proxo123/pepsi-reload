@@ -18,7 +18,7 @@ getgenv().PEPSI_REPO = REPO
 getgenv().PEPSI_CACHE_BUST = "v55"
 
 local ok, err = pcall(function()
-	loadstring(game:HttpGet(REPO .. "src/bootstrap.lua"))()
+	loadstring(game:HttpGet(REPO .. "src/bootstrap.lua?cb=" .. getgenv().PEPSI_CACHE_BUST))()
 end)
 
 if not ok then
