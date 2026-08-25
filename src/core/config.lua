@@ -1,8 +1,8 @@
 -- Update REPO after pushing to GitHub (raw.githubusercontent.com user/repo/branch/)
 return {
-	VERSION = "v57-generic",
+	VERSION = "v58-generic",
 	REPO = "https://raw.githubusercontent.com/Proxo123/pepsi-reload/main/",
-	AIM_STEP = "PepsiHubAim_v57",
+	AIM_STEP = "PepsiHubAim_v58",
 	LIBRARY_ID = "rbxassetid://7657867786",
 	CONFIG_WORKSPACE = "PepsiHub",
 	DEFAULT_CONFIG = "default",
@@ -10,6 +10,8 @@ return {
 		AimSmoothness = 0.35,
 		AimFOV = 120,
 		AimRange = 1200,
+		SilentFOV = 120,
+		SilentAngleFOV = 45,
 		DeadDropThreshold = 40,
 		MaxPartSeparation = 12,
 		LobbyMinY = 85,

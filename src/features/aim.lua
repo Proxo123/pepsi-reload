@@ -54,6 +54,68 @@ function Aim.create(ctx)
 		return targetsApi.visible(origin, t.aimPart.Position, t.character, t.key)
 	end
 
+	local function targetScoreSilent(t, origin, center, screenFov, angleFov, range)
+		local part = t.aimPart
+		if not partAlive(part) then
+			return
+		end
+		local targetPos = part.Position
+		local worldDist = (targetPos - origin).Magnitude
+		if worldDist > range then
+			return
+		end
+		local pos, onScreen = ctx.camera:WorldToViewportPoint(targetPos)
+		if onScreen and pos.Z > 0 then
+			local screenDist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+			if screenDist <= screenFov then
+				return screenDist
+			end
+		end
+		local dir = (targetPos - origin).Unit
+		local angle = math.deg(math.acos(math.clamp(ctx.camera.CFrame.LookVector:Dot(dir), -1, 1)))
+		if angle <= angleFov then
+			return 10000 + angle * 10 + worldDist * 0.01
+		end
+	end
+
+	local function getSilentTarget(targetList)
+		if not ctx.flags.flagOn("SilentAim") then
+			return
+		end
+		if UIS:GetFocusedTextBox() then
+			return
+		end
+		if isrbxactive and not isrbxactive() then
+			return
+		end
+		ctx.camera = workspace.CurrentCamera
+		if not ctx.camera then
+			return
+		end
+		local origin = ctx.camera.CFrame.Position
+		local range = tonumber(ctx.flags.flagVal("AimRange", ctx.config.DEFAULTS.AimRange)) or ctx.config.DEFAULTS.AimRange
+		local screenFov = tonumber(ctx.flags.flagVal("SilentFOV", ctx.config.DEFAULTS.SilentFOV)) or ctx.config.DEFAULTS.SilentFOV
+		local angleFov = tonumber(ctx.flags.flagVal("SilentAngleFOV", ctx.config.DEFAULTS.SilentAngleFOV))
+			or ctx.config.DEFAULTS.SilentAngleFOV
+		local center = ctx.camera.ViewportSize * 0.5
+		local best, bestDist
+		for _, t in ipairs(targetList) do
+			if targetsApi.isValidAimTarget(t) then
+				local score = targetScoreSilent(t, origin, center, screenFov, angleFov, range)
+				if score and (not bestDist or score < bestDist) then
+					best = t
+					bestDist = score
+				end
+			end
+		end
+		if best and ctx.flags.flagOn("AimWallCheck") then
+			if not targetsApi.visible(origin, best.aimPart.Position, best.character, best.key) then
+				return
+			end
+		end
+		return best
+	end
+
 	local function getAimTarget(targetList)
 		if not ctx.flags.flagOn("AimEnabled") then
 			state.lockedTargetKey = nil
@@ -156,6 +218,7 @@ function Aim.create(ctx)
 	return {
 		holdRequired = holdRequired,
 		getAimTarget = getAimTarget,
+		getSilentTarget = getSilentTarget,
 		applyAim = applyAim,
 	}
 end

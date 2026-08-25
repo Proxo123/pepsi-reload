@@ -23,10 +23,10 @@ function Menu.create(ctx)
 
 	local colSec = colorTab:CreateSection({ Name = "Colors", Side = "Left" })
 	local configSec = settingsTab:CreateSection({ Name = "Configs", Side = "Left" })
-	local miscSec = settingsTab:CreateSection({ Name = "Arsenal", Side = "Right" })
 	local autoloadSec = settingsTab:CreateSection({ Name = "Autoload", Side = "Right" })
 
 	aimMain:AddToggle({ Name = "Enabled", Flag = "AimEnabled", Value = false })
+	aimMain:AddToggle({ Name = "Silent Aim", Flag = "SilentAim", Value = false })
 	aimMain:AddToggle({ Name = "Team Check", Flag = "AimTeamCheck", Value = false })
 	aimMain:AddToggle({ Name = "Wall Check", Flag = "AimWallCheck", Value = true })
 	aimMain:AddToggle({ Name = "Sticky Target", Flag = "AimSticky", Value = true })
@@ -60,6 +60,15 @@ function Menu.create(ctx)
 		Textbox = true,
 	})
 	aimSet:AddSlider({ Name = "FOV", Flag = "AimFOV", Value = defaults.AimFOV, Min = 10, Max = 800, Textbox = true })
+	aimSet:AddSlider({ Name = "Silent FOV", Flag = "SilentFOV", Value = defaults.SilentFOV, Min = 10, Max = 800, Textbox = true })
+	aimSet:AddSlider({
+		Name = "Silent Angle FOV",
+		Flag = "SilentAngleFOV",
+		Value = defaults.SilentAngleFOV,
+		Min = 1,
+		Max = 180,
+		Textbox = true,
+	})
 	aimSet:AddSlider({ Name = "Range", Flag = "AimRange", Value = defaults.AimRange, Min = 50, Max = 5000, Textbox = true })
 	aimSet:AddSlider({ Name = "FOV Thickness", Flag = "AimFOVThickness", Value = 1, Min = 1, Max = 4, Textbox = true })
 
@@ -108,22 +117,6 @@ function Menu.create(ctx)
 		Flag = "ESPTracerOrigin",
 		Value = "Bottom",
 		List = { "Bottom", "Center", "Top", "Mouse" },
-	})
-
-	miscSec:AddToggle({
-		Name = "Fake Saber In Melee Locker",
-		Flag = "FakeMeleeEnabled",
-		Value = false,
-		Callback = function(enabled)
-			if not ctx.fakeMelee then
-				return
-			end
-			if enabled then
-				ctx.fakeMelee.inject()
-			else
-				ctx.fakeMelee.clear()
-			end
-		end,
 	})
 
 	colSec:AddColorpicker({ Name = "Players", Flag = "PlayerColor", Value = Color3.fromRGB(255, 70, 70) })

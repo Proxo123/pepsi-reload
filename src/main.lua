@@ -8,7 +8,7 @@ function Main.start(import)
 	local TargetsMod = import("src/features/targets")
 	local AimMod = import("src/features/aim")
 	local EspMod = import("src/features/esp")
-	local FakeMeleeMod = import("src/features/fake_melee")
+	local SilentMod = import("src/features/silent")
 	local MenuMod = import("src/ui/menu")
 	local ConfigStoreMod = import("src/core/config_store")
 
@@ -59,6 +59,9 @@ function Main.start(import)
 		state = {
 			renderWarned = false,
 			aimTargetPart = nil,
+			silentTargetPart = nil,
+			silentRayState = nil,
+			silentNamecallRestore = nil,
 			lockedTargetKey = nil,
 			cachedTargetList = {},
 			lastSeenEsp = {},
@@ -71,7 +74,7 @@ function Main.start(import)
 	ctx.targets = TargetsMod.create(ctx)
 	ctx.aim = AimMod.create(ctx)
 	ctx.esp = EspMod.create(ctx)
-	ctx.fakeMelee = FakeMeleeMod.create(ctx)
+	ctx.silent = SilentMod.create(ctx)
 	ctx.menu = MenuMod.create(ctx)
 	ctx.flags.refresh()
 
@@ -83,7 +86,7 @@ function Main.start(import)
 	end
 
 	local function needsLogic()
-		return ctx.flags.flagOn("ESPEnabled") or ctx.flags.flagOn("AimEnabled")
+		return ctx.flags.flagOn("ESPEnabled") or ctx.flags.flagOn("AimEnabled") or ctx.flags.flagOn("SilentAim")
 	end
 
 	local function needsVisuals()
@@ -96,6 +99,10 @@ function Main.start(import)
 
 		local aimTarget = ctx.aim.getAimTarget(targetList)
 		ctx.state.aimTargetPart = aimTarget and aimTarget.aimPart or nil
+
+		local silentTarget = ctx.aim.getSilentTarget(targetList)
+		ctx.state.silentTargetPart = silentTarget and silentTarget.aimPart or nil
+		ctx.silent.refresh()
 	end
 
 	local function runVisuals()
@@ -147,6 +154,8 @@ function Main.start(import)
 
 	local function unload()
 		ctx.state.aimTargetPart = nil
+		ctx.state.silentTargetPart = nil
+		ctx.state.silentRayState = nil
 		ctx.state.lockedTargetKey = nil
 		pcall(function()
 			RunService:UnbindFromRenderStep(Config.AIM_STEP)
@@ -164,9 +173,6 @@ function Main.start(import)
 			ctx.draw.clearKey(k)
 		end
 		ctx.draw.destroyDrawing(fovCircle)
-		if ctx.fakeMelee and ctx.fakeMelee.unload then
-			ctx.fakeMelee.unload()
-		end
 		pcall(function()
 			library.unload()
 		end)
